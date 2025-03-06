@@ -182,12 +182,13 @@ namespace MaxyGames.UNode.Editors {
 		protected List<string> graphUsingNamespaces = new List<string>() {
 			"UnityEngine",
 			"System.Collections.Generic",
-		};
+            "UnityEngine.Playables",
+        };
 		protected List<SerializedType> graphInterfaces = new List<SerializedType>();
 		protected Texture2D graphIcon;
 		protected List<UnityEventType> graphUnityEvents = new List<UnityEventType>() {
-			UnityEventType.Start,
-			UnityEventType.Update,
+			//UnityEventType.Start,
+			//UnityEventType.Update,
 		};
 		protected bool createEventInMainGraph = true;
 		protected List<MemberInfo> graphOverrideMembers = new List<MemberInfo>();
@@ -196,7 +197,7 @@ namespace MaxyGames.UNode.Editors {
 
 		protected List<VariableData> graphVariables = new List<VariableData>();
 
-		protected GraphLayout graphLayout = GraphLayout.Vertical;
+		protected GraphLayout graphLayout = GraphLayout.Horizontal;
 
 		public GraphCreatorWindow window;
 		#endregion

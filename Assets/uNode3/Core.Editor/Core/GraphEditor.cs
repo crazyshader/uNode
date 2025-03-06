@@ -395,9 +395,9 @@ namespace MaxyGames.UNode.Editors {
 			FilterAttribute filter = null,
 			Action<Node> onAddNode = null,
 			NodeFilter nodeFilter = NodeFilter.None) {
-			if(uNodeEditorUtility.DisplayRequiredProVersion()) {
-				return;
-			}
+			//if(uNodeEditorUtility.DisplayRequiredProVersion()) {
+			//	return;
+			//}
 
 			var valueMenuPos = GetMenuPosition();
 			if(filter == null) {

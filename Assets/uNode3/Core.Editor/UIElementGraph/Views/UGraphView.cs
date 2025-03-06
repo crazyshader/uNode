@@ -2532,7 +2532,136 @@ namespace MaxyGames.UNode.Editors {
 			//}
 		}
 
-		void OnCreateNode(Vector2 screenMousePosition) {
+		void OnCreateFavoriteNode(Vector2 screenMousePosition)
+		{
+            graph.Repaint();
+            Vector2 point = graph.window.rootVisualElement.ChangeCoordinatesTo(
+                contentViewContainer,
+                screenMousePosition);
+            INodeBlock blockView = nodeViews.Select(view => view as INodeBlock).FirstOrDefault(view => view != null && view.nodeView.GetPosition().Contains(point));
+            if (blockView != null)
+            {
+                switch (blockView.blockType)
+                {
+                    case BlockType.Action:
+                    case BlockType.CoroutineAction:
+                        graph.ShowFavoriteMenu(screenMousePosition, onAddNode: node =>
+                        {
+                            node.nodeObject.SetParent(blockView.blocks);
+                            uNodeGUIUtility.GUIChanged(blockView.nodeView.targetNode, UIChangeType.Important);
+                        }, nodeFilter: NodeFilter.FlowInput);
+                        break;
+                    case BlockType.Condition:
+                        graph.ShowFavoriteMenu(screenMousePosition, new FilterAttribute(typeof(object)), onAddNode: node =>
+                        {
+                            if (node is not MultipurposeNode && node.ReturnType() == typeof(bool))
+                            {
+                                node.nodeObject.SetParent(blockView.blocks);
+                            }
+                            else
+                            {
+                                var nodeType = node.ReturnType();
+                                node.position = blockView.nodeView.GetPosition();
+                                node.nodeObject.position.x -= 200;
+
+                                GenericMenu menu = new GenericMenu();
+                                menu.AddItem(new GUIContent("Is Equal"), false, () =>
+                                {
+                                    NodeEditorUtility.AddNewNode<Nodes.ComparisonNode>(blockView.blocks, Vector2.zero, nod =>
+                                    {
+                                        nod.inputType = nodeType;
+                                        nod.inputA.ConnectTo(node.nodeObject.primaryValueOutput);
+                                        nod.inputB.AssignToDefault(MemberData.CreateFromValue(null, nod.inputType));
+                                    });
+                                });
+                                menu.AddItem(new GUIContent("Is Not Equal"), false, () =>
+                                {
+                                    NodeEditorUtility.AddNewNode<Nodes.ComparisonNode>(blockView.blocks, Vector2.zero, nod =>
+                                    {
+                                        nod.inputType = nodeType;
+                                        nod.operatorKind = ComparisonType.NotEqual;
+                                        nod.inputA.ConnectTo(node.nodeObject.primaryValueOutput);
+                                        nod.inputB.AssignToDefault(MemberData.CreateFromValue(null, nod.inputType));
+                                    });
+                                });
+                                menu.AddSeparator("");
+                                menu.AddItem(new GUIContent("Is Value True"), false, () =>
+                                {
+                                    NodeEditorUtility.AddNewNode<Nodes.ComparisonNode>(blockView.blocks, Vector2.zero, nod =>
+                                    {
+                                        node.nodeObject.SetParent(blockView.blocks);
+                                    });
+                                });
+                                menu.AddItem(new GUIContent("Is Type Equal"), false, () =>
+                                {
+                                    NodeEditorUtility.AddNewNode<Nodes.ISNode>(blockView.blocks, Vector2.zero, nod =>
+                                    {
+                                        nod.target.ConnectTo(node.nodeObject.primaryValueOutput);
+                                    }
+                                    );
+                                });
+                                menu.AddSeparator("");
+                                if (uNodeEditorUtility.IsNumericType(nodeType))
+                                {
+                                    menu.AddItem(new GUIContent("Is Greater Than"), false, () =>
+                                    {
+                                        NodeEditorUtility.AddNewNode<Nodes.ComparisonNode>(blockView.blocks, Vector2.zero, nod =>
+                                        {
+                                            nod.inputType = nodeType;
+                                            nod.operatorKind = ComparisonType.GreaterThan;
+                                            nod.inputA.ConnectTo(node.nodeObject.primaryValueOutput);
+                                            nod.inputB.AssignToDefault(MemberData.CreateFromValue(null, nod.inputType));
+                                        });
+                                    });
+                                    menu.AddItem(new GUIContent("Is Greater Than Or Equal"), false, () =>
+                                    {
+                                        NodeEditorUtility.AddNewNode<Nodes.ComparisonNode>(blockView.blocks, Vector2.zero, nod =>
+                                        {
+                                            nod.inputType = nodeType;
+                                            nod.operatorKind = ComparisonType.GreaterThanOrEqual;
+                                            nod.inputA.ConnectTo(node.nodeObject.primaryValueOutput);
+                                            nod.inputB.AssignToDefault(MemberData.CreateFromValue(null, nod.inputType));
+                                        });
+                                    });
+                                    menu.AddItem(new GUIContent("Is Less Than"), false, () =>
+                                    {
+                                        NodeEditorUtility.AddNewNode<Nodes.ComparisonNode>(blockView.blocks, Vector2.zero, nod =>
+                                        {
+                                            nod.inputType = nodeType;
+                                            nod.operatorKind = ComparisonType.LessThan;
+                                            nod.inputA.ConnectTo(node.nodeObject.primaryValueOutput);
+                                            nod.inputB.AssignToDefault(MemberData.CreateFromValue(null, nod.inputType));
+                                        });
+                                    });
+                                    menu.AddItem(new GUIContent("Is Less Than Or Equal"), false, () =>
+                                    {
+                                        NodeEditorUtility.AddNewNode<Nodes.ComparisonNode>(blockView.blocks, Vector2.zero, nod =>
+                                        {
+                                            nod.inputType = nodeType;
+                                            nod.operatorKind = ComparisonType.LessThanOrEqual;
+                                            nod.inputA.ConnectTo(node.nodeObject.primaryValueOutput);
+                                            nod.inputB.AssignToDefault(MemberData.CreateFromValue(null, nod.inputType));
+                                        });
+                                    });
+                                }
+                                menu.ShowAsContext();
+                            }
+                            uNodeGUIUtility.GUIChanged(blockView.nodeView.targetNode, UIChangeType.Important);
+                        }, nodeFilter: NodeFilter.ValueInput);
+                        break;
+                }
+            }
+            else
+            {
+                var nodeView = nodeViews.Where(view => !(view is RegionNodeView)).FirstOrDefault(view => view != null && view.GetPosition().Contains(point));
+                if (nodeView == null && graphData.canAddNode)
+                {
+                    graph.ShowFavoriteMenu(point);
+                }
+            }
+        }
+
+        void OnCreateNode(Vector2 screenMousePosition) {
 			graph.Repaint();
 			Vector2 point = graph.window.rootVisualElement.ChangeCoordinatesTo(
 				contentViewContainer,
@@ -2649,20 +2778,31 @@ namespace MaxyGames.UNode.Editors {
 				}
 				return true;
 			}
-			else if(type == GraphShortcutType.OpenCommand) {
-				if(graphData.canAddNode) {
-					if(ContainsPoint(window.rootVisualElement.ChangeCoordinatesTo(this, screenMousePosition))) {
+			else if(type == GraphShortcutType.AddFavoriteNode)
+			{
+                if (graphData.canAddNode)
+                {
+                    if (ContainsPoint(window.rootVisualElement.ChangeCoordinatesTo(this, screenMousePosition)))
+                    {
+                        OnCreateFavoriteNode(screenMousePosition);
+                    }
+                }
+                return true;
+            }
+			else if (type == GraphShortcutType.OpenCommand) {
+				if (graphData.canAddNode) {
+					if (ContainsPoint(window.rootVisualElement.ChangeCoordinatesTo(this, screenMousePosition))) {
 						Vector2 point = graph.window.rootVisualElement.ChangeCoordinatesTo(
 							contentViewContainer,
 							screenMousePosition);
 
 						IEnumerable<string> namespaces = null;
-						if(graphData.graph != null) {
+						if (graphData.graph != null) {
 							namespaces = graphData.graph.GetUsingNamespaces();
 						}
 						AutoCompleteWindow.CreateWindow(Vector2.zero, (items) => {
 							var nodes = CompletionEvaluator.CompletionsToGraphs(CompletionEvaluator.SimplifyCompletions(items), graphData, point);
-							if(nodes != null && nodes.Count > 0) {
+							if (nodes != null && nodes.Count > 0) {
 								graph.Refresh();
 								return true;
 							}
@@ -2678,20 +2818,20 @@ namespace MaxyGames.UNode.Editors {
 				}
 				return true;
 			}
-			else if(type == GraphShortcutType.FrameGraph) {
+			else if (type == GraphShortcutType.FrameGraph) {
 				FrameSelection();
 				return true;
 			}
-			else if(type == GraphShortcutType.CopySelectedNodes) {
+			else if (type == GraphShortcutType.CopySelectedNodes) {
 				CopySelectedNodes();
 				return true;
 			}
-			else if(type == GraphShortcutType.CutSelectedNodes) {
+			else if (type == GraphShortcutType.CutSelectedNodes) {
 				CutSelectedNodes();
 				return true;
 			}
-			else if(type == GraphShortcutType.PasteNodesClean) {
-				if(graphData.canAddNode) {
+			else if (type == GraphShortcutType.PasteNodesClean) {
+				if (graphData.canAddNode) {
 					uNodeEditorUtility.RegisterUndo(graphData.owner, "Paste nodes");
 					var clickedPos = GetMousePosition(graph.topMousePos);
 					graph.PasteNode(clickedPos, true);
@@ -2699,8 +2839,8 @@ namespace MaxyGames.UNode.Editors {
 				}
 				return true;
 			}
-			else if(type == GraphShortcutType.PasteNodesWithLink) {
-				if(graphData.canAddNode) {
+			else if (type == GraphShortcutType.PasteNodesWithLink) {
+				if (graphData.canAddNode) {
 					uNodeEditorUtility.RegisterUndo(graphData.owner, "Paste nodes");
 					var clickedPos = GetMousePosition(graph.topMousePos);
 					graph.PasteNode(clickedPos, false);
@@ -2708,8 +2848,8 @@ namespace MaxyGames.UNode.Editors {
 				}
 				return true;
 			}
-			else if(type == GraphShortcutType.DuplicateNodes) {
-				if(graphData.canAddNode) {
+			else if (type == GraphShortcutType.DuplicateNodes) {
+				if (graphData.canAddNode) {
 					uNodeEditorUtility.RegisterUndo(graphData.owner, "Duplicate nodes");
 					CopySelectedNodes();
 					graph.Repaint();
@@ -2719,27 +2859,27 @@ namespace MaxyGames.UNode.Editors {
 				}
 				return true;
 			}
-			else if(type == GraphShortcutType.DeleteSelectedNodes) {
+			else if (type == GraphShortcutType.DeleteSelectedNodes) {
 				DeleteSelectionCallback(AskUser.DontAskUser);
 				return true;
 			}
-			else if(type == GraphShortcutType.SelectAllNodes) {
+			else if (type == GraphShortcutType.SelectAllNodes) {
 				ClearSelection();
 				AddToSelection(nodeViews.Select(view => view as ISelectable));
 				return true;
 			}
-			else if(type == GraphShortcutType.CreateRegion) {
-				if(graphData.canAddNode) {
+			else if (type == GraphShortcutType.CreateRegion) {
+				if (graphData.canAddNode) {
 					SelectionAddRegion(screenMousePosition);
 				}
 				return true;
 			}
-			else if(type == GraphShortcutType.PlaceFitNodes) {
-				if(ContainsPoint(window.rootVisualElement.ChangeCoordinatesTo(this, screenMousePosition))) {
-					if(graphData.selectedCount == 1) {
+			else if (type == GraphShortcutType.PlaceFitNodes) {
+				if (ContainsPoint(window.rootVisualElement.ChangeCoordinatesTo(this, screenMousePosition))) {
+					if (graphData.selectedCount == 1) {
 						var selected = graphData.selecteds.First() as NodeObject;
-						if(selected != null) {
-							if(nodeViewsPerNode.TryGetValue(selected, out var view)) {
+						if (selected != null) {
+							if (nodeViewsPerNode.TryGetValue(selected, out var view)) {
 								UIElementUtility.PlaceFitNodes(view);
 							}
 						}
@@ -2748,14 +2888,14 @@ namespace MaxyGames.UNode.Editors {
 				}
 
 			}
-			else if(type == GraphShortcutType.Rename) {
-				if(graphData.selectedCount == 1) {
+			else if (type == GraphShortcutType.Rename) {
+				if (graphData.selectedCount == 1) {
 					var selected = graphData.selecteds.First();
-					if(selected is NodeObject nodeObject) {
+					if (selected is NodeObject nodeObject) {
 						ActionPopupWindow.Show(Vector2.zero, nodeObject.name,
 							(ref object obj) => {
 								object str = EditorGUILayout.TextField(obj as string);
-								if(obj != str) {
+								if (obj != str) {
 									obj = str;
 									nodeObject.name = obj as string;
 									uNodeGUIUtility.GUIChanged(nodeObject, UIChangeType.Average);

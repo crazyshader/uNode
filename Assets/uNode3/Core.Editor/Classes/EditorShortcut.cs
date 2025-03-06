@@ -10,7 +10,8 @@ namespace MaxyGames.UNode.Editors {
 		Refresh,
 		Rename,
 		AddNode,
-		CreateRegion,
+        AddFavoriteNode,
+        CreateRegion,
 		FrameGraph,
 		OpenCommand,
 		CopySelectedNodes,
@@ -82,6 +83,16 @@ namespace MaxyGames.UNode.Editors {
 			}
 		}
 
+        [Shortcut("uNode/Add Favorite Node", typeof(uNodeEditor), KeyCode.Space, ShortcutModifiers.Action)]
+        static void Shortcut_AddFavoriteNode(ShortcutArguments args)
+        {
+            var window = args.context as uNodeEditor;
+            if (window != null)
+            {
+                window.graphEditor.HandleShortcut(GraphShortcutType.AddFavoriteNode);
+            }
+        }
+        
 		[Shortcut("uNode/Quick Create Region", typeof(uNodeEditor), KeyCode.F, ShortcutModifiers.Action)]
 		static void Shortcut_QuickCreateRegion(ShortcutArguments args) {
 			var window = args.context as uNodeEditor;
@@ -106,23 +117,23 @@ namespace MaxyGames.UNode.Editors {
 			}
 		}
 
-		[Shortcut("uNode/Open Command", typeof(uNodeEditor), KeyCode.Space, ShortcutModifiers.Action)]
-		static void Shortcut_OpenCommand(ShortcutArguments args) {
-			var window = args.context as uNodeEditor;
-			if(window != null) {
-				window.graphEditor.HandleShortcut(GraphShortcutType.OpenCommand);
-			}
-		}
-
-		//[Shortcut("uNode/Graph Canvas/Add - Remove Node from selection", typeof(uNodeEditor), KeyCode.Mouse0, ShortcutModifiers.Action)]
-		//static void Shortcut_AddOrRemoveNode(ShortcutArguments args) {
+		//[Shortcut("uNode/Open Command", typeof(uNodeEditor), KeyCode.Space, ShortcutModifiers.Action)]
+		//static void Shortcut_OpenCommand(ShortcutArguments args) {
 		//	var window = args.context as uNodeEditor;
 		//	if(window != null) {
-
+		//		window.graphEditor.HandleShortcut(GraphShortcutType.OpenCommand);
 		//	}
 		//}
+        
+		//[Shortcut("uNode/Graph Canvas/Add - Remove Node from selection", typeof(uNodeEditor), KeyCode.Mouse0, ShortcutModifiers.Action)]
+        //static void Shortcut_AddOrRemoveNode(ShortcutArguments args) {
+        //	var window = args.context as uNodeEditor;
+        //	if(window != null) {
 
-		[Shortcut("uNode/Select all nodes", typeof(uNodeEditor), KeyCode.A, ShortcutModifiers.Action)]
+        //	}
+        //}
+
+        [Shortcut("uNode/Select all nodes", typeof(uNodeEditor), KeyCode.A, ShortcutModifiers.Action)]
 		static void Shortcut_SelectAll(ShortcutArguments args) {
 			var window = args.context as uNodeEditor;
 			if(window != null) {
