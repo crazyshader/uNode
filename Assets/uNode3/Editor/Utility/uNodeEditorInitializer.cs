@@ -1280,6 +1280,7 @@ namespace MaxyGames.UNode.Editors {
 				GraphUtility.SaveAllGraph();
 				if(compileGraphs) {
 					if(uNodePreference.preferenceData.generatorData.autoGenerateOnBuild) {
+						GenerationUtility.DeleteGeneratedCSharpScript();
 						GenerationUtility.CompileProjectGraphs(true);
 						while(uNodeThreadUtility.IsNeedUpdate()) {
 							uNodeThreadUtility.Update();
@@ -1412,7 +1413,8 @@ namespace MaxyGames.UNode.Editors {
 			}
 			GraphUtility.SaveAllGraph();
 			if(uNodePreference.preferenceData.generatorData.autoGenerateOnBuild) {
-				GenerationUtility.CompileProjectGraphs();
+                GenerationUtility.DeleteGeneratedCSharpScript();
+                GenerationUtility.CompileProjectGraphs();
 				while(uNodeThreadUtility.IsNeedUpdate()) {
 					uNodeThreadUtility.Update();
 				}
