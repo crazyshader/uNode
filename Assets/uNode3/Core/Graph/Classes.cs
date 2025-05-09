@@ -105,7 +105,7 @@ namespace MaxyGames.UNode {
 			}
 			catch (Exception ex) {
 				failedDeserialize = true;
-				Debug.LogException(new Exception($"Error on trying to deserialize value: {serializedType.typeName}", ex));
+				//Debug.LogException(new Exception($"Error on trying to deserialize value: {serializedType.typeName}", ex));
 			}
 		}
 
