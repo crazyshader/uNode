@@ -4,6 +4,9 @@ using System;
 namespace MaxyGames.UNode.Nodes {
 	[NodeMenu("Yield", "Timer", IsCoroutine = true, scope = NodeScope.StateGraph, icon = typeof(TypeIcons.ClockIcon))]
 	public class NodeTimer : Node {
+		public bool unscaledTime;
+
+
 		[NonSerialized]
 		public FlowInput start;
 		[NonSerialized]
@@ -46,7 +49,6 @@ namespace MaxyGames.UNode.Nodes {
 			onFinished = FlowOutput(nameof(onFinished));
 
 			waitTime = ValueInput<float>(nameof(waitTime), 1);
-
 			start = FlowInput(nameof(start), (flow) => {
 				var data = flow.GetOrCreateElementData<RuntimeData>(this);
 				if(!data.timerOn) {
@@ -103,7 +105,11 @@ namespace MaxyGames.UNode.Nodes {
 
 		void DoUpdate(Flow flow, RuntimeData data) {
 			if(data.timerOn && !data.paused) {
-				data.elapsed += Time.deltaTime;
+				if(unscaledTime) {
+					data.elapsed += Time.unscaledDeltaTime;
+				} else {
+					data.elapsed += Time.deltaTime;
+				}
 				if(data.elapsed >= data.duration) {
 					Reset(flow);
 					flow.TriggerParallel(onFinished);
@@ -167,7 +173,7 @@ namespace MaxyGames.UNode.Nodes {
 							isActive,
 							paused.CGNot()),
 						CG.Flow(
-							elapsed.CGSet(typeof(Time).CGAccess(nameof(Time.deltaTime)), SetType.Add),
+							elapsed.CGSet(typeof(Time).CGAccess(unscaledTime ? nameof(Time.unscaledDeltaTime) : nameof(Time.deltaTime)), SetType.Add),
 							CG.If(
 								elapsed.CGCompare(duration, ComparisonType.GreaterThanOrEqual),
 								CG.Flow(
