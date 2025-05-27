@@ -243,8 +243,8 @@ namespace MaxyGames.UNode.Editors {
 						Debug.LogError(result.GetErrorMessage());
 					}
 				} else {
-					AssetDatabase.Refresh();
 					AssetDatabase.SaveAssets();
+					AssetDatabase.ImportAsset(dir, ImportAssetOptions.ForceUpdate | ImportAssetOptions.ImportRecursive | ImportAssetOptions.ForceSynchronousImport);
 				}
 				uNodeDatabase.ClearCache();
 				Debug.Log("Successful generating project script, project graphs will run with native c#." +
@@ -253,6 +253,7 @@ namespace MaxyGames.UNode.Editors {
 				"\nGenerated project script can be found on: " + dir);
 			}
 			finally {
+				AssetDatabase.Refresh();
 				EditorUtility.ClearProgressBar();
 			}
 		}
