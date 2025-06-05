@@ -138,48 +138,41 @@ namespace MaxyGames.UNode.Editors {
 								return;
 							}
 						}
-						if(generic is UnityEngine.Object && uNodeEditorUtility.IsSceneObject(generic as UnityEngine.Object)) {
-							DragAndDrop.visualMode = DragAndDropVisualMode.None;
-							return;
-						}
+						//if(generic is UnityEngine.Object && uNodeEditorUtility.IsSceneObject(generic as UnityEngine.Object)) {
+						//	DragAndDrop.visualMode = DragAndDropVisualMode.None;
+						//	return;
+						//}
 					}
-					else if(DragAndDrop.objectReferences.Length > 0) {
-						if(uNodeEditorUtility.IsSceneObject(DragAndDrop.objectReferences[0])) {
-							DragAndDrop.visualMode = DragAndDropVisualMode.None;
-							return;
-						}
-					}
+					//else if(DragAndDrop.objectReferences.Length > 0) {
+					//	if(uNodeEditorUtility.IsSceneObject(DragAndDrop.objectReferences[0])) {
+					//		DragAndDrop.visualMode = DragAndDropVisualMode.None;
+					//		return;
+					//	}
+					//}
 				}
 				DragAndDrop.visualMode = DragAndDropVisualMode.Generic;
 			}
 		}
 
 		#region Drag Handler
-		private void DragHandleVariable(Variable variable, Vector2 position) {
+		private void DragHandleVariable(Variable variable, Vector2 position, Vector2 menuPosition) {
 			if(variable.graphContainer != graphData.graph) {
 				EditorUtility.DisplayDialog("Error", "The graph of the variable must same with the current graph", "Ok");
 				return;
 			}
 			GenericMenu menu = new GenericMenu();
-			menu.AddItem(new GUIContent("Get"), false, (() => {
-				NodeEditorUtility.AddNewNode(graphData, variable.name, null, position, delegate (MultipurposeNode n) {
-					var mData = MemberData.CreateFromValue(variable);
-					n.target = mData;
-					n.Register();
-				});
-				graph.Refresh();
-			}));
-			menu.AddItem(new GUIContent("Set"), false, (() => {
-				NodeEditorUtility.AddNewNode(graphData, variable.name, null, position, delegate (Nodes.NodeSetValue n) {
-					var mData = MemberData.CreateFromValue(variable);
-					n.Register();
-					n.target.AssignToDefault(mData);
-					if(mData.type != null) {
-						n.value.AssignToDefault(MemberData.Default(mData.type));
-					}
-				});
-				graph.Refresh();
-			}));
+			var dragData = new DragHandlerDataForGraphElement() {
+				draggedValue = variable,
+				droppedTarget = graphData.currentCanvas,
+				graphEditor = graph,
+				mousePositionOnCanvas = position,
+				mousePositionOnScreen = menuPosition,
+			};
+			DragHandlerMenu.Instances.ForEach(handler => {
+				if(handler.IsValid(dragData)) {
+					menu.AppendMenu(handler.GetMenuItems(dragData));
+				}
+			});
 			menu.ShowAsContext();
 		}
 
@@ -196,182 +189,79 @@ namespace MaxyGames.UNode.Editors {
 					return;
 				}
 			}
-			if(!(graphData.graph is IIndependentGraph)) {
-				EditorUtility.DisplayDialog("Error", "The c# graph cannot reference project and scene object.", "Ok");
-				return;
-			}
-			else if(!EditorUtility.IsPersistent(obj) && !uNodeEditorUtility.IsSceneObject(graphData.owner)) {
-				EditorUtility.DisplayDialog("Error", "The project graph cannot reference scene object.", "Ok");
-				return;
-			}
-			else if(graphData.graph.GetGraphType().IsSubclassOf(typeof(UnityEngine.Object)) == false) {
-				EditorUtility.DisplayDialog("Error", "The graph that's not inherited from UnityEngine.Object cannot reference project and scene object.", "Ok");
-				return;
-			}
 			GenericMenu menu = new GenericMenu();
 
-			#region Dragged Action
-			Action<UnityEngine.Object, string> action = (dOBJ, startName) => {
-				menu.AddItem(new GUIContent(startName + "Get"), false, () => {
-					FilterAttribute filter = new FilterAttribute();
-					filter.MaxMethodParam = int.MaxValue;
-					filter.VoidType = true;
-					filter.Public = true;
-					filter.Instance = true;
-					filter.Static = false;
-					filter.DisplayDefaultStaticType = false;
-					var type = dOBJ.GetType();
-					if(dOBJ is IRuntimeClass || dOBJ is IReflectionType || dOBJ is IInstancedGraph) {
-						type = ReflectionUtils.GetRuntimeType(dOBJ);
-					}
-					string category = type.PrettyName();
-					var customItems = ItemSelector.MakeCustomItems(type, filter, category, ItemSelector.CategoryInherited);
-					if(customItems != null) {
-						//TODO: fix me
-						//if(!(dOBJ is uNodeInterface)) {
-						//	customItems.Insert(0, ItemSelector.CustomItem.Create("this", () => {
-						//		var value = new MemberData(dOBJ, MemberData.TargetType.Values);
-						//		value.startType = type;
-						//		NodeEditorUtility.AddNewNode<MultipurposeNode>(editorData, null, null, position, delegate (MultipurposeNode n) {
-						//			if(n.target == null) {
-						//				n.target = new MultipurposeMember();
-						//			}
-						//			n.target.target = value;
-						//			MemberDataUtility.UpdateMultipurposeMember(n.target);
-						//		});
-						//		graph.Refresh();
-						//	}, category));
-						//}
-						ItemSelector w = ItemSelector.ShowWindow(dOBJ, filter, delegate (MemberData value) {
-							//if(dOBJ is uNodeInterface) {
-							//	dOBJ = null;//Will make the instance null for graph interface
-							//}
-							var mData = new MemberData(dOBJ, MemberData.TargetType.Values);
-							mData.startType = type;
-							value.startType = type;
-							value.instance = mData;
-							NodeEditorUtility.AddNewNode<MultipurposeNode>(graphData, position, delegate (MultipurposeNode n) {
-								n.target = value;
-							});
-							graph.Refresh();
-						}, customItems).ChangePosition(menuPosition);
-						w.displayDefaultItem = false;
-					}
-				});
-				menu.AddItem(new GUIContent(startName + "Set"), false, () => {
-					FilterAttribute filter = new FilterAttribute();
-					filter.SetMember = true;
-					filter.MaxMethodParam = int.MaxValue;
-					//filter.VoidType = true;
-					filter.Public = true;
-					filter.Instance = true;
-					filter.Static = false;
-					filter.DisplayDefaultStaticType = false;
-					var type = dOBJ.GetType();
-					if(dOBJ is IRuntimeClass || dOBJ is IReflectionType || dOBJ is IInstancedGraph) {
-						type = ReflectionUtils.GetRuntimeType(dOBJ);
-					}
-					var customItems = ItemSelector.MakeCustomItems(type, filter, type.PrettyName(), ItemSelector.CategoryInherited);
-					if(customItems != null) {
-						ItemSelector w = ItemSelector.ShowWindow(dOBJ, filter, delegate (MemberData value) {
-							//if(dOBJ is uNodeInterface) {
-							//	dOBJ = null;//Will make the instance null for graph interface
-							//}
-							value.instance = dOBJ;
-							value.startType = type;
-							NodeEditorUtility.AddNewNode<Nodes.NodeSetValue>(graphData, position, (n) => {
-								n.target.AssignToDefault(value);
-							});
-							graph.Refresh();
-						}, customItems).ChangePosition(menuPosition);
-						w.displayDefaultItem = false;
-					}
-				});
+			var dragData = new DragHandlerDataForGraphElement() {
+				draggedValue = obj,
+				droppedTarget = graphData.currentCanvas,
+				graphEditor = graph,
+				mousePositionOnCanvas = position,
+				mousePositionOnScreen = menuPosition,
 			};
-			#endregion
+			DragHandlerMenu.Instances.ForEach(handler => {
+				if(handler.IsValid(dragData)) {
+					menu.AppendMenu(handler.GetMenuItems(dragData));
+				}
+			});
 
-			action(obj, "");
-			if(obj is GameObject) {
-				menu.AddSeparator("");
-				foreach(var comp in (obj as GameObject).GetComponents<Component>()) {
-					action(comp, comp.GetType().Name + "/");
+			if(menu.GetItemCount() == 0) {
+				if(!(graphData.graph is IIndependentGraph)) {
+					EditorUtility.DisplayDialog("Error", "The c# graph cannot reference project and scene object.", "Ok");
+					return;
+				}
+				else if(!EditorUtility.IsPersistent(obj) && !uNodeEditorUtility.IsSceneObject(graphData.owner)) {
+					EditorUtility.DisplayDialog("Error", "The project graph cannot reference scene object.", "Ok");
+					return;
+				}
+				else if(graphData.graph.GetGraphType().IsSubclassOf(typeof(UnityEngine.Object)) == false) {
+					EditorUtility.DisplayDialog("Error", "The graph that's not inherited from UnityEngine.Object cannot reference project and scene object.", "Ok");
+					return;
 				}
 			}
-			else if(obj is Component) {
-				menu.AddSeparator("");
-				foreach(var comp in (obj as Component).GetComponents<Component>()) {
-					action(comp, comp.GetType().Name + "/");
-				}
-			}
+
 			menu.ShowAsContext();
 		}
 
-		private void DragHandleProperty(Property property, Vector2 position) {
+		private void DragHandleProperty(Property property, Vector2 position, Vector2 menuPosition) {
 			if(property.graphContainer != graphData.graph) {
 				EditorUtility.DisplayDialog("Error", "The graph of the property must same with the current graph", "Ok");
 				return;
 			}
 			GenericMenu menu = new GenericMenu();
-			if(property.CanGetValue()) {
-				menu.AddItem(new GUIContent("Get"), false, () => {
-					NodeEditorUtility.AddNewNode<MultipurposeNode>(graphData, property.name, null, position, delegate (MultipurposeNode n) {
-						var mData = MemberData.CreateFromValue(property);
-						n.target = mData;
-						n.EnsureRegistered();
-					});
-					graph.Refresh();
-				});
-			}
-			if(property.CanSetValue()) {
-				menu.AddItem(new GUIContent("Set"), false, () => {
-					NodeEditorUtility.AddNewNode(graphData, property.name, null, position, delegate (Nodes.NodeSetValue n) {
-						n.EnsureRegistered();
-						var mData = MemberData.CreateFromValue(property);
-						n.target.AssignToDefault(mData);
-						if(mData.type != null) {
-							n.value.AssignToDefault(MemberData.Default(mData.type));
-						}
-					});
-					graph.Refresh();
-				});
-			}
+			var dragData = new DragHandlerDataForGraphElement() {
+				draggedValue = property,
+				droppedTarget = graphData.currentCanvas,
+				graphEditor = graph,
+				mousePositionOnCanvas = position,
+				mousePositionOnScreen = menuPosition,
+			};
+			DragHandlerMenu.Instances.ForEach(handler => {
+				if(handler.IsValid(dragData)) {
+					menu.AppendMenu(handler.GetMenuItems(dragData));
+				}
+			});
 			menu.ShowAsContext();
 		}
 
-		private void DragHandleFunction(Function function, Vector2 position) {
+		private void DragHandleFunction(Function function, Vector2 position, Vector2 menuPosition) {
 			if(function.graphContainer != graphData.graph) {
 				EditorUtility.DisplayDialog("Error", "The graph of the function must same with the current graph", "Ok");
 				return;
 			}
-			if(function.ReturnType().IsCastableTo(typeof(System.Collections.IEnumerator)) && graphData.graph.GetGraphInheritType().IsCastableTo(typeof(MonoBehaviour))) {
-				GenericMenu menu = new GenericMenu();
-				menu.AddItem(new GUIContent("Invoke"), false, (() => {
-					NodeEditorUtility.AddNewNode<MultipurposeNode>(graphData, function.name, null, position, (n) => {
-						n.target = MemberData.CreateFromValue(function);
-					});
-					graph.Refresh();
-				}));
-				menu.AddItem(new GUIContent("Start Coroutine"), false, (() => {
-					NodeEditorUtility.AddNewNode(graphData, position, delegate (NodeBaseCaller node) {
-						node.target = MemberData.CreateFromMember(typeof(MonoBehaviour).GetMethod(nameof(MonoBehaviour.StartCoroutine), new[] { typeof(System.Collections.IEnumerator) }));
-						node.Register();
-
-						NodeEditorUtility.AddNewNode<MultipurposeNode>(graphData, function.name, null, new Vector2(position.x - 200, position.y), (n) => {
-							n.target = MemberData.CreateFromValue(function);
-
-							node.parameters[0].input.ConnectTo(n.output);
-						});
-					});
-					graph.Refresh();
-				}));
-				menu.ShowAsContext();
-			}
-			else {
-				NodeEditorUtility.AddNewNode<MultipurposeNode>(graphData, function.name, null, position, (n) => {
-					n.target = MemberData.CreateFromValue(function);
-				});
-				graph.Refresh();
-			}
+			GenericMenu menu = new GenericMenu();
+			var dragData = new DragHandlerDataForGraphElement() {
+				draggedValue = function,
+				droppedTarget = graphData.currentCanvas,
+				graphEditor = graph,
+				mousePositionOnCanvas = position,
+				mousePositionOnScreen = menuPosition,
+			};
+			DragHandlerMenu.Instances.ForEach(handler => {
+				if(handler.IsValid(dragData)) {
+					menu.AppendMenu(handler.GetMenuItems(dragData));
+				}
+			});
+			menu.ShowAsContext();
 			DragAndDrop.SetGenericData("uNode", null);
 		}
 
@@ -559,8 +449,8 @@ namespace MaxyGames.UNode.Editors {
 			if(graphData.canAddNode == false) {
 				return;
 			}
-			Vector2 topMPos;
-			Vector2 mPos = GetMousePosition(evt, out topMPos);
+			Vector2 mPos = GetMousePosition(evt, out var topMPos);
+			var iPOS = graph.window.GetMousePositionForMenu(topMPos);
 			if(DragAndDrop.GetGenericData("uNode") != null) {
 				var generic = DragAndDrop.GetGenericData("uNode");
 
@@ -581,7 +471,7 @@ namespace MaxyGames.UNode.Editors {
 				#region Function
 				if(generic is Function) {//Drag functions.
 					var function = generic as Function;
-					DragHandleFunction(function, mPos);
+					DragHandleFunction(function, mPos, iPOS);
 				}
 				else
 				#endregion
@@ -589,7 +479,7 @@ namespace MaxyGames.UNode.Editors {
 				#region Property
 				if(generic is Property) {//Drag property
 					var property = generic as Property;
-					DragHandleProperty(property, mPos);
+					DragHandleProperty(property, mPos, iPOS);
 				}
 				else
 				#endregion
@@ -597,7 +487,7 @@ namespace MaxyGames.UNode.Editors {
 				#region Variable
 				if(generic is Variable) {//Drag variable.
 					var varData = generic as Variable;
-					DragHandleVariable(varData, mPos);
+					DragHandleVariable(varData, mPos, iPOS);
 				}
 				else
 				#endregion
@@ -805,11 +695,9 @@ namespace MaxyGames.UNode.Editors {
 			}
 			else if(DragAndDrop.objectReferences.Length == 1) {//Dragging UnityObject
 				var dragObject = DragAndDrop.objectReferences[0];
-				var iPOS = graph.window.GetMousePositionForMenu(topMPos);
 				DragHandleObject(dragObject, mPos, iPOS);
 			}
 			else if(DragAndDrop.objectReferences.Length > 1) {
-				var iPOS = graph.window.GetMousePositionForMenu(topMPos);
 				GenericMenu menu = new GenericMenu();
 				foreach(var o in DragAndDrop.objectReferences) {
 					menu.AddItem(new GUIContent("Get/" + o.name), false, (dOBJ) => {
