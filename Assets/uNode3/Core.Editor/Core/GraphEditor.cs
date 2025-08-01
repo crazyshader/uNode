@@ -8,8 +8,25 @@ using Object = UnityEngine.Object;
 
 namespace MaxyGames.UNode.Editors {
 	public abstract class GraphEditor {
+		public class CanvasData {
+			public readonly HashSet<string> features = new();
+
+			public bool SupportSurroundWith => features.Contains(nameof(GraphManipulator.Feature.SurroundWith));
+			public bool SupportMacro => features.Contains(nameof(GraphManipulator.Feature.Macro));
+			public bool SupportPlaceFit => features.Contains(nameof(GraphManipulator.Feature.PlaceFit));
+			public bool ShowAddNodeContextMenu => features.Contains(nameof(GraphManipulator.Feature.ShowAddNodeContextMenu));
+
+			public bool IsFeatureSupported(string feature) => feature.Contains(feature);
+
+			public void Reset() {
+				features.Clear();
+			}
+		}
+
+
 		#region Variables
 		public uNodeEditor window;
+		public CanvasData canvasData = new();
 
 		public Vector2 topMousePos;
 		#endregion
@@ -34,6 +51,17 @@ namespace MaxyGames.UNode.Editors {
 
 		public void UpdatePosition() {
 			window?.UpdatePosition();
+		}
+
+		[NonSerialized]
+		private UGraphElement m_prevCanvas;
+		public void CanvasChanged() {
+			if(graphData != null) {
+				if(m_prevCanvas != graphData.currentCanvas) {
+					m_prevCanvas = graphData.currentCanvas;
+					OnCanvasChanged();
+				}
+			}
 		}
 
 		public void SelectionChanged() {
@@ -436,7 +464,7 @@ namespace MaxyGames.UNode.Editors {
 						favoriteItems.Add(ItemSelector.CustomItem.Create(
 							menuItem,
 							() => {
-								NodeEditorUtility.AddNewNode<Node>(graphData, menuItem.nodeName ?? menuItem.name.Split(' ')[0], menuItem.type, position, onAddNode);
+								NodeEditorUtility.AddNewNode<Node>(graphData, menuItem.nodeName, menuItem.type, position, onAddNode);
 								Refresh();
 							},
 							icon: uNodeEditorUtility.GetTypeIcon(menuItem.GetIcon()),
@@ -506,7 +534,7 @@ namespace MaxyGames.UNode.Editors {
 						favoriteItems.Add(ItemSelector.CustomItem.Create(
 							menuItem,
 							() => {
-								NodeEditorUtility.AddNewNode<Node>(graphData, menuItem.nodeName ?? menuItem.name.Split(' ')[0], menuItem.type, position, onAddNode);
+								NodeEditorUtility.AddNewNode<Node>(graphData, menuItem.nodeName, menuItem.type, position, onAddNode);
 								Refresh();
 							},
 							icon: uNodeEditorUtility.GetTypeIcon(menuItem.GetIcon()),
@@ -543,7 +571,7 @@ namespace MaxyGames.UNode.Editors {
 					customItems.Add(ItemSelector.CustomItem.Create(
 						menuItem,
 						() => {
-							NodeEditorUtility.AddNewNode<Node>(graphData, menuItem.nodeName ?? menuItem.name.Split(' ')[0], menuItem.type, position, onAddNode);
+							NodeEditorUtility.AddNewNode<Node>(graphData, menuItem.nodeName, menuItem.type, position, onAddNode);
 							Refresh();
 						},
 						icon: uNodeEditorUtility.GetTypeIcon(menuItem.GetIcon())));
@@ -666,6 +694,41 @@ namespace MaxyGames.UNode.Editors {
 
 		}
 
+		public void Validate() {
+			if(graphData != null && graphData.isSupportMainGraph == false && graphData.graphData != null) {
+				var container = graphData.graphData.mainGraphContainer;
+				if(container.childCount > 0) {
+					container.Destroy();
+				}
+			}
+		}
+
+		protected virtual void OnCanvasChanged() {
+			var data = canvasData;
+			data.Reset();
+
+			data.features.Add(nameof(GraphManipulator.Feature.Macro));
+			data.features.Add(nameof(GraphManipulator.Feature.PlaceFit));
+			data.features.Add(nameof(GraphManipulator.Feature.SurroundWith));
+			data.features.Add(nameof(GraphManipulator.Feature.ShowAddNodeContextMenu));
+
+			var manipulators = NodeEditorUtility.FindGraphManipulators();
+			foreach(var manipulator in manipulators) {
+				manipulator.graphEditor = this;
+				if(manipulator.IsValid(nameof(manipulator.GetCanvasFeatures))) {
+					var obj = manipulator.GetCanvasFeatures();
+					if(obj != null) {
+						data.features.AddRange(obj);
+					}
+				}
+			}
+			foreach(var manipulator in manipulators) {
+				if(manipulator.IsValid(nameof(manipulator.ManipulateCanvasFeatures))) {
+					manipulator.ManipulateCanvasFeatures(data.features);
+				}
+			}
+		}
+
 		/// <summary>
 		/// Draw a canvas ( called every frame )
 		/// </summary>
@@ -747,6 +810,7 @@ namespace MaxyGames.UNode.Editors {
 			if(graphData == null)
 				return;
 			graphData.position = position;
+			CanvasChanged();
 		}
 
 		/// <summary>
@@ -762,7 +826,7 @@ namespace MaxyGames.UNode.Editors {
 		/// </summary>
 		/// <param name="position"></param>
 		/// <param name="removeOtherConnections"></param>
-		public void PasteNode(Vector2 position, bool removeOtherConnections = false) {
+		public NodeObject[] PasteNode(Vector2 position, bool removeOtherConnections = false) {
 			if(graphData.currentCanvas != null && GraphUtility.CopyPaste.IsCopiedNodes) {
 				var nodes = GraphUtility.CopyPaste.Paste(graphData.currentCanvas, removeOtherConnections: removeOtherConnections).Select(n => n as NodeObject).ToArray();
 
@@ -776,7 +840,40 @@ namespace MaxyGames.UNode.Editors {
 					node.position.x = node.position.x - center.x + position.x;
 					node.position.y = node.position.y - center.y + position.y;
 				}
+				Refresh();
+				return nodes;
 			}
+			return Array.Empty<NodeObject>();
+		}
+
+		public virtual void CreateLinkedMacro(MacroGraph macro, Vector2 position) {
+			NodeEditorUtility.AddNewNode<Nodes.LinkedMacroNode>(graphData, null, null, position, (node) => {
+				node.macroAsset = macro;
+				node.Refresh();
+				node.Register();
+				NodeEditorUtility.AutoAssignNodePorts(node);
+			});
+			Refresh();
+		}
+
+		public virtual void SelectionAddRegion(Vector2 position) {
+			var nodes = graphData.selectedNodes.ToArray();
+			Rect rect;
+			if(nodes.Length > 0) {
+				rect = NodeEditorUtility.GetNodeRect(nodes);
+			}
+			else {
+				rect = new Rect(position.x, position.y, 200, 130);
+			}
+			uNodeEditorUtility.RegisterUndo(graphData.owner, "Create region");
+			NodeEditorUtility.AddNewNode<Nodes.NodeRegion>(graphData, default, (node) => {
+				rect.x -= 30;
+				rect.y -= 50;
+				rect.width += 60;
+				rect.height += 70;
+				node.position = rect;
+				node.nodeColor = new Color(UnityEngine.Random.Range(0f, 1f), UnityEngine.Random.Range(0f, 1f), UnityEngine.Random.Range(0f, 1f));
+			});
 			Refresh();
 		}
 		#endregion

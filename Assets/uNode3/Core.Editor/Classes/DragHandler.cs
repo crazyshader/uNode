@@ -352,7 +352,16 @@ namespace MaxyGames.UNode.Editors {
 
 					if(d.graphData.graph is IGraphWithVariables && obj.GetType() != typeof(MonoScript)) {
 						yield return new DropdownMenuAction(startName + "Create variable with type: " + obj.GetType().PrettyName(true), evt => {
-							var variable = d.graphData.graphData.variableContainer.AddVariable("newVariable", obj.GetType());
+							string name = "newVariable";
+							if(obj is GameObject gameObject) {
+								name = uNodeUtility.AutoCorrectName(gameObject.name);
+							}
+							else if(obj is Component component) {
+								name = uNodeUtility.AutoCorrectName(component.gameObject.name);
+							}
+							if(name.Length > 1)
+								name = char.ToLower(name[0]) + name.Substring(1);
+							var variable = d.graphData.graphData.variableContainer.AddVariable(name, obj.GetType());
 							if(valid) {
 								variable.defaultValue = obj;
 							}
@@ -410,7 +419,7 @@ namespace MaxyGames.UNode.Editors {
 								}
 							}, DropdownMenuAction.AlwaysEnabled);
 
-							if(d.graphData.currentCanvas is MainGraphContainer && d.graphData.graph is IStateGraph && d.graphData.graph is IReflectionType) {
+							if(d.graphData.currentCanvas is MainGraphContainer && d.graphData.graph is IStateGraph) {
 								yield return new DropdownMenuAction(startName + "Members/" + info.Name + " - Create event listener", evt => {
 									NodeEditorUtility.AddNewNode(d.graphData, d.mousePositionOnCanvas, delegate (CSharpEventListener node) {
 										node.target = MemberData.CreateFromMember(info);
@@ -535,7 +544,7 @@ namespace MaxyGames.UNode.Editors {
 
 		public override bool IsValid(DragHandlerData data) {
 			if(data is DragHandlerDataForGraphElement d) {
-				if(d.graphData.currentCanvas is not MainGraphContainer || d.graphData.graph is not IStateGraph || d.graphData.graph is not IReflectionType)
+				if(d.graphData.currentCanvas is not MainGraphContainer || d.graphData.graph is not IStateGraph)
 					return false;
 				if(d.draggedValue is Variable variable) {
 					return variable.type.IsSubclassOf(typeof(System.Delegate));
@@ -586,6 +595,65 @@ namespace MaxyGames.UNode.Editors {
 				if(d.draggedValue is Function function) {
 					return function.ReturnType().IsSubclassOf(typeof(System.Delegate));
 				}
+			}
+			return false;
+		}
+	}
+
+	class DragHandlerMenuForStateMachine : DragHandlerMenu {
+		public override int order => int.MinValue;
+
+		public override IEnumerable<DropdownMenuItem> GetMenuItems(DragHandlerData data) {
+			if(data is DragHandlerDataForGraphElement d) {
+				var obj = d.draggedValue as StateGraphContainer;
+
+				IEnumerable<DropdownMenuItem> DoAction(UGraphElement obj, string path = "") {
+					yield return new DropdownMenuAction($"{path}Get State Machine", evt => {
+						NodeEditorUtility.AddNewNode(d.graphData, obj.name, null, d.mousePositionOnCanvas, delegate (GetStateMachineNode n) {
+							n.kind = GetStateMachineNode.Kind.StateMachine;
+							n.reference = obj;
+							n.EnsureRegistered();
+						});
+						d.graphEditor.Refresh();
+					}, DropdownMenuAction.AlwaysEnabled);
+					foreach(var state in obj.GetNodesInChildren<IStateNodeWithTransition>()) {
+						if(state is AnyStateNode) continue;
+						var title = (state as Node).GetTitle();
+						yield return new DropdownMenuAction($"{path}{title}/Set State", evt => {
+							NodeEditorUtility.AddNewNode(d.graphData, obj.name, null, d.mousePositionOnCanvas, delegate (GetStateMachineNode n) {
+								n.kind = GetStateMachineNode.Kind.SetState;
+								n.reference = obj;
+								n.stateReference = (state as Node).nodeObject;
+								n.EnsureRegistered();
+							});
+							d.graphEditor.Refresh();
+						}, DropdownMenuAction.AlwaysEnabled);
+						yield return new DropdownMenuAction($"{path}{title}/Get State Is Active", evt => {
+							NodeEditorUtility.AddNewNode(d.graphData, obj.name, null, d.mousePositionOnCanvas, delegate (GetStateMachineNode n) {
+								n.kind = GetStateMachineNode.Kind.GetState;
+								n.reference = obj;
+								n.stateReference = (state as Node).nodeObject;
+								n.EnsureRegistered();
+							});
+							d.graphEditor.Refresh();
+						}, DropdownMenuAction.AlwaysEnabled);
+						if(state is NestedStateNode nested) {
+							foreach(var v in DoAction(nested, title + "/")) {
+								yield return v;
+							}
+						}
+					}
+				}
+				foreach(var v in DoAction(obj)) {
+					yield return v;
+				}
+			}
+			yield break;
+		}
+
+		public override bool IsValid(DragHandlerData data) {
+			if(data is DragHandlerDataForGraphElement d) {
+				return d.draggedValue is StateGraphContainer;
 			}
 			return false;
 		}

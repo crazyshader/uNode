@@ -350,6 +350,12 @@ namespace MaxyGames.UNode {
 
 		public UGraphElementRef(UGraphElement graphObject) : base(graphObject, graphObject?.graphContainer) {
 		}
+
+		public static implicit operator UGraphElementRef(UGraphElement element) {
+			if(element == null)
+				return null;
+			return new(element);
+		}
 	}
 
 	[Serializable]
@@ -460,11 +466,11 @@ namespace MaxyGames.UNode {
 		}
 	}
 
-	public abstract class NodeContainerWithEntry : NodeContainer {
+	public abstract class NodeContainerWithEntry : NodeContainer, IElementWithEntry {
 		[NonSerialized]
 		protected NodeObject entryObject;
 
-		public virtual Nodes.FunctionEntryNode Entry {
+		public virtual BaseEntryNode Entry {
 			get {
 				if(this == null) return null;
 				if(entryObject == null || entryObject.node is not Nodes.FunctionEntryNode) {
@@ -474,11 +480,11 @@ namespace MaxyGames.UNode {
 						entryObject.EnsureRegistered();
 					}
 				}
-				return entryObject.node as Nodes.FunctionEntryNode;
+				return entryObject.node as BaseEntryNode;
 			}
 		}
 
-		public virtual void RegisterEntry(Nodes.FunctionEntryNode node) { }
+		public virtual void RegisterEntry(BaseEntryNode node) { }
 	}
 
 	public sealed class VariableContainer : URoot<Variable> {
@@ -545,10 +551,9 @@ namespace MaxyGames.UNode {
 		}
 	}
 
-	public sealed class MainGraphContainer : NodeContainer, IPrettyName, IIcon {
-		public const string StateGraph = "State Graph";
-		public const string MacroGraph = "Macro Graph";
+	public sealed class EventGraphContainer : URoot<NodeContainer> { }
 
+	public sealed class MainGraphContainer : NodeContainer, IPrettyName, IIcon {
 		public override bool AllowCoroutine() {
 			var container = graphContainer;
 			if(container is IMacroGraph || container is IStateGraph) {
@@ -570,7 +575,7 @@ namespace MaxyGames.UNode {
 				return "Macro Graph";
 			}
 			else if(container is IStateGraph) {
-				return "State Graph";
+				return "Event Graph";
 			}
 			else if(container is ICustomMainGraph mainGraph) {
 				return mainGraph.MainGraphTitle;
@@ -928,13 +933,39 @@ namespace MaxyGames.UNode {
 		protected Type _type;
 		[NonSerialized]
 		internal Func<Type> dynamicType;
+		[NonSerialized]
+		private Func<bool> autoType;
+		/// <summary>
+		/// The port type
+		/// </summary>
 		public Type type {
 			get {
-				if(_type != null)
-					return _type;
-				if(dynamicType != null)
-					return dynamicType();
-				return typeof(object);
+				if(IsAutoType && connections.Count > 0) {
+					for(int i = 0; i < connections.Count; i++) {
+						if(connections[i].isValid) {
+							if(connections[i].input != this) {
+								if(connections[i].input.IsAutoType == false) {
+									//var other = connections[i].input;
+									//Type actualType = null;
+									//if(other.filter != null) {
+									//	actualType = other.filter.GetActualType();
+									//}
+									//if(actualType == null) {
+									//	actualType = other.type;
+									//}
+									return connections[i].input.type;
+								}
+							}
+							else {
+								if(connections[i].output.IsAutoType == false) {
+									return connections[i].output.type;
+								}
+							}
+							break;
+						}
+					}
+				}
+				return _type ?? dynamicType?.Invoke() ?? typeof(object);
 			}
 			set {
 				_type = value;
@@ -946,6 +977,51 @@ namespace MaxyGames.UNode {
 		public Func<bool> canSetValue;
 		[SerializeReference]
 		public List<ValueConnection> connections = new List<ValueConnection>();
+
+		public Type StaticType {
+			get => _type;
+			set => _type = value;
+		}
+
+		/// <summary>
+		/// True if the port type is dynamic
+		/// </summary>
+		public bool IsDynamicType => dynamicType != null || IsAutoType;
+		/// <summary>
+		/// If true, the <see cref="type"/> will be auto based on connected port, if there's no connection fallback to default.
+		/// </summary>
+		public bool IsAutoType => autoType?.Invoke() == true;
+
+		/// <summary>
+		/// Set the type of the port
+		/// </summary>
+		/// <param name="func"></param>
+		public void SetType(Func<Type> func) {
+			dynamicType = func;
+			_type = null;
+		}
+
+		/// <summary>
+		/// Set the auto type. If true, the <see cref="type"/> will be auto based on connected port, if there's no connection fallback to default.
+		/// </summary>
+		/// <param name="value"></param>
+		public void SetAutoType(bool value) {
+			static bool FUNC() => true;
+			if(value) {
+				autoType = FUNC;
+			}
+			else {
+				autoType = null;
+			}
+		}
+
+		/// <summary>
+		/// Set the auto type. If true, the <see cref="type"/> will be auto based on connected port, if there's no connection fallback to default.
+		/// </summary>
+		/// <param name="func"></param>
+		public void SetAutoType(Func<bool> func) {
+			autoType = func;
+		}
 
 		protected ValuePort(NodeObject node) : base(node) {
 		}

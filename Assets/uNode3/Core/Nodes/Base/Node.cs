@@ -15,6 +15,7 @@ namespace MaxyGames.UNode {
 		public string name => _nodeObject?.name;
 		public int id => _nodeObject?.id ?? 0;
 		public string comment => _nodeObject?.comment;
+
 		/// <summary>
 		/// The node position in graph.
 		/// </summary>
@@ -38,6 +39,11 @@ namespace MaxyGames.UNode {
 			}
 		}
 
+		/// <summary>
+		/// The node styles
+		/// </summary>
+		public virtual string[] Styles => null;
+
 		protected GraphException exceptionInvalidFlow => new GraphException("Live editing: trying to execute flow on invalid node." + "Node: " + GetTitle() + " - id:" + id, this);
 		protected GraphException exceptionInvalidValue => new GraphException("Live editing: trying to get / set on invalid node." + "Node: " + GetTitle() + " - id:" + id, this);
 
@@ -55,6 +61,9 @@ namespace MaxyGames.UNode {
 		/// Re-register the node.
 		/// </summary>
 		public void Register() => nodeObject.Register();
+
+		//For debugging purpose, don't remove this
+		internal string DebugDisplay => GraphException.GetMessage(this);
 
 		/// <summary>
 		/// The node registration.
@@ -163,10 +172,10 @@ namespace MaxyGames.UNode {
 		/// The type port of the primary value output.
 		/// </summary>
 		/// <returns></returns>
-		public virtual Type ReturnType() => typeof(object);
+		protected virtual Type ReturnType() => typeof(object);
 
-		public virtual bool CanGetValue() => nodeObject.primaryValueOutput != null;
-		public virtual bool CanSetValue() => false;
+		protected virtual bool CanGetValue() => nodeObject.primaryValueOutput != null;
+		protected virtual bool CanSetValue() => false;
 
 		/// <summary>
 		/// Initialization for code generation.
@@ -249,11 +258,27 @@ namespace MaxyGames.UNode {
 		}
 
 		protected ValueInput ValueInput(string id, Type type) {
-			return ValueInput(id, type, null);
+			return ValueInput(id, type, default(MemberData));
 		}
 
 		protected ValueInput ValueInput(string id, Type type, object @default) {
 			return ValueInput(id, type, MemberData.CreateFromValue(@default, type));
+		}
+
+		protected ValueInput ValueInput(string id, Type type, Func<object> @default) {
+			if(nodeObject.ValueInputs.Any(p => p.id == id)) {
+				throw new ArgumentException($"Duplicate port for '{id}' in {GetType()}");
+			}
+			var port = nodeObject.RegisterPort(new ValueInput(this, id, type), out var isNew);
+			if(isNew) {
+				if(@default != null) {
+					port.DefaultValue = MemberData.CreateFromValue(@default.Invoke(), type);
+				}
+				else {
+					port.DefaultValue = MemberData.None;
+				}
+			}
+			return port;
 		}
 
 		protected ValueInput ValueInput(string id, Type type, MemberData @default) {
@@ -272,6 +297,22 @@ namespace MaxyGames.UNode {
 			return port;
 		}
 
+		protected ValueInput ValueInput(string id, Type type, Func<MemberData> @default) {
+			if(nodeObject.ValueInputs.Any(p => p.id == id)) {
+				throw new ArgumentException($"Duplicate port for '{id}' in {GetType()}");
+			}
+			var port = nodeObject.RegisterPort(new ValueInput(this, id, type), out var isNew);
+			if(isNew) {
+				if(@default != null) {
+					port.DefaultValue = @default.Invoke();
+				}
+				else {
+					port.DefaultValue = MemberData.None;
+				}
+			}
+			return port;
+		}
+
 		protected ValueInput ValueInput(string id, Func<Type> type, MemberData @default = null) {
 			if(nodeObject.ValueInputs.Any(p => p.id == id)) {
 				throw new ArgumentException($"Duplicate port for '{id}' in {GetType()}");
@@ -280,6 +321,22 @@ namespace MaxyGames.UNode {
 			if(isNew) {
 				if(@default != null) {
 					port.DefaultValue = @default;
+				}
+				else {
+					port.DefaultValue = MemberData.None;
+				}
+			}
+			return port;
+		}
+
+		protected ValueInput ValueInput(string id, Func<Type> type, Func<MemberData> @default) {
+			if(nodeObject.ValueInputs.Any(p => p.id == id)) {
+				throw new ArgumentException($"Duplicate port for '{id}' in {GetType()}");
+			}
+			var port = nodeObject.RegisterPort(new ValueInput(this, id, type), out var isNew);
+			if(isNew) {
+				if(@default != null) {
+					port.DefaultValue = @default.Invoke();
 				}
 				else {
 					port.DefaultValue = MemberData.None;
@@ -328,7 +385,7 @@ namespace MaxyGames.UNode {
 		}
 
 		protected FlowInput FlowInput(string id, Action<Flow> action) {
-			if(nodeObject.ValueInputs.Any(p => p.id == id)) {
+			if(nodeObject.FlowInputs.Any(p => p.id == id)) {
 				throw new ArgumentException($"Duplicate port for '{id}' in {GetType()}");
 			}
 			var port = new FlowInput(this, id, action);
@@ -336,7 +393,7 @@ namespace MaxyGames.UNode {
 		}
 
 		protected FlowInput FlowInput(string id, Func<Flow, IEnumerator> action) {
-			if(nodeObject.ValueInputs.Any(p => p.id == id)) {
+			if(nodeObject.FlowInputs.Any(p => p.id == id)) {
 				throw new ArgumentException($"Duplicate port for '{id}' in {GetType()}");
 			}
 			var port = new FlowInput(this, id, action);

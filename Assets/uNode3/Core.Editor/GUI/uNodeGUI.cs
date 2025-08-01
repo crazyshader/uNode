@@ -785,6 +785,20 @@ namespace MaxyGames.UNode.Editors {
 			}
 		}
 
+		public static void DrawReference(object reference, Type objectType) {
+			uNodeGUI.DrawReference(uNodeGUIUtility.GetRect(), reference, objectType);
+		}
+
+		public static void DrawReference(GUIContent label, object reference, Type objectType) {
+			var position = EditorGUI.PrefixLabel(uNodeGUIUtility.GetRect(), label);
+			uNodeGUI.DrawReference(position, reference, objectType);
+		}
+
+		public static void DrawReference(Rect position, GUIContent label, object reference, Type objectType) {
+			position = EditorGUI.PrefixLabel(position, label);
+			uNodeGUI.DrawReference(position, reference, objectType);
+		}
+
 		public static void DrawReference(Rect position, object reference, Type objectType) {
 			if(reference is Node) {
 				DrawReference(position, (reference as Node).nodeObject, typeof(NodeObject));
@@ -813,6 +827,36 @@ namespace MaxyGames.UNode.Editors {
 				EditorGUI.BeginDisabledGroup(true);
 				EditorGUI.ObjectField(position, GUIContent.none, reference as Object, objectType, true);
 				EditorGUI.EndDisabledGroup();
+			}
+			else if(reference is UReference) {
+				var val = (reference as UReference).ReferenceValue;
+				if(val != null) {
+					DrawReference(position, val, val.GetType());
+				}
+				else {
+					EditorGUI.DropdownButton(position, new GUIContent("null", uNodeEditorUtility.GetTypeIcon(objectType)), FocusType.Keyboard, EditorStyles.objectField);
+				}
+			}
+			else if(reference is UPort) {
+				var port = reference as UPort;
+				var element = port.node;
+				var text = element.name;
+				if(element is IPrettyName) {
+					text = (element as IPrettyName).GetPrettyName();
+				}
+				var icon = objectType;
+				if(element is IIcon) {
+					icon = (element as IIcon).GetIcon() ?? objectType;
+				}
+				if(Event.current.clickCount == 1 && Event.current.button == 0 && position.Contains(Event.current.mousePosition)) {
+					if(element is NodeObject) {
+						uNodeEditor.Highlight(element as NodeObject);
+					}
+					else {
+						uNodeEditor.Open(element.graphContainer, element);
+					}
+				}
+				EditorGUI.DropdownButton(position, new GUIContent(text + " > " + port.GetPrettyName(), uNodeEditorUtility.GetTypeIcon(icon)), FocusType.Keyboard, EditorStyles.objectField);
 			}
 			else if(reference == null) {
 				EditorGUI.DropdownButton(position, new GUIContent("null", uNodeEditorUtility.GetTypeIcon(objectType)), FocusType.Keyboard, EditorStyles.objectField);
@@ -895,8 +939,49 @@ namespace MaxyGames.UNode.Editors {
 		#endregion
 
 		#region Layout Version
-		public static string TextInput(string text, string placeholder, bool area = false, bool delayedField = true, params GUILayoutOption[] options) {
-			var newText = area ? EditorGUILayout.TextArea(text, options) : delayedField ? EditorGUILayout.DelayedTextField(text, options) : EditorGUILayout.TextField(text, options);
+		private static Dictionary<int, string> editBuffer = new();
+		public static string TextInput(string text, string placeholder, bool area = false, bool delayedField = true, GUIStyle style = null, params GUILayoutOption[] options) {
+			if(style == null) {
+				style = EditorStyles.textField;
+			}
+			string newText = text;
+			if(area) {
+				newText = EditorGUILayout.TextArea(text, style, options);
+			}
+			else if(delayedField) {
+				int controlId = GUIUtility.GetControlID(FocusType.Keyboard) + 1;
+				int currentKeyboard = GUIUtility.keyboardControl;
+
+				if(currentKeyboard == controlId - 1) {
+					//For auto focus to the text control
+					GUIUtility.keyboardControl = controlId;
+				}
+
+				string buffer = editBuffer.TryGetValue(controlId, out var buf) ? buf : text;
+				buffer = EditorGUILayout.TextField(buffer, style, options);
+				if(buffer != text) {
+					editBuffer[controlId] = buffer;
+					if(currentKeyboard == controlId) {
+						if(Event.current.type == EventType.KeyUp &&
+							Event.current.keyCode == KeyCode.Return) {
+							GUIUtility.keyboardControl = 0; // remove focus
+
+							editBuffer.Remove(controlId);
+							newText = buffer;
+							//GUI.FocusControl(null);
+							GUI.changed = true;
+							//Event.current.Use();
+						}
+					}
+					else if(editBuffer.ContainsKey(controlId) && buffer != text) {
+						editBuffer.Remove(controlId);
+						newText = buffer;
+					}
+				}
+			}
+			else {
+				newText = EditorGUILayout.TextField(text, style, options);
+			}
 			if(string.IsNullOrEmpty(text)) {
 				const int textMargin = 2;
 				var guiColor = GUI.color;

@@ -104,6 +104,7 @@ namespace MaxyGames.UNode.Editors {
 			var value = new T();
 			value.name = name;
 			value.SetParent(parent);
+			EditorReflectionUtility.UpdateRuntimeType(parent);
 			action?.Invoke(value);
 		}
 
@@ -145,6 +146,7 @@ namespace MaxyGames.UNode.Editors {
 				}
 			}
 			variable.SetParent(container);
+			EditorReflectionUtility.UpdateRuntimeType(container.graphContainer);
 			action?.Invoke(variable);
 		}
 
@@ -525,6 +527,9 @@ namespace MaxyGames.UNode.Editors {
 				var ports = target.ValueInputs;
 				foreach(var port in ports) {
 					if(type.IsCastableTo(port.type)) {
+						if(port.filter != null && port.filter.SetMember && valueOutput.CanSetValue() == false) {
+							continue;
+						}
 						var con = Connection.CreateAndConnect(port, valueOutput);
 						AutoRerouteAndProxy(con, canvas);
 						return true;

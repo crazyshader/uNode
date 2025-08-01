@@ -3,6 +3,7 @@ using UnityEngine;
 using System.Reflection;
 using System;
 using System.Collections;
+using System.Linq;
 
 namespace MaxyGames.UNode {
 	public interface INamespace {
@@ -95,8 +96,12 @@ namespace MaxyGames.UNode {
 		object ReferenceValue { get; }
 	}
 
-	public interface IGraphEventHandler {
+	/// <summary>
+	/// Implement in node to handle childs event nodes
+	/// </summary>
+	public interface INodeWithEventHandler {
 		bool CanTrigger(GraphInstance instance);
+		string GenerateTriggerCode(string contents) => contents;
 	}
 
 	/// <summary>
@@ -284,6 +289,10 @@ namespace MaxyGames.UNode {
 
 	internal interface IGraphElement { }
 
+	internal interface IDebugableDisplay {
+		internal string DebugDisplay { get; }
+	}
+
 	public interface IGetValue {
 		object Get();
 	}
@@ -359,9 +368,28 @@ namespace MaxyGames.UNode {
 
 	public interface ICustomMainGraph {
 		string MainGraphTitle => "Event Graph";
+		/// <summary>
+		/// The main graph scope, separated by comma
+		/// </summary>
 		string MainGraphScope => NodeScope.All;
 		bool AllowCoroutine => false;
+		/// <summary>
+		/// If true, user are allowed to create a node, etc.
+		/// </summary>
 		bool CanCreateOnMainGraph => true;
+	}
+
+	public interface IGraphWithEventGraph {
+		/// <summary>
+		/// The list of supported event graph type
+		/// </summary>
+		HashSet<string> SupportedEventGraphs { get; }
+	}
+
+	public interface IEventGraphCanvas {
+		string Title { get; }
+		string Scope => NodeScope.FlowGraph;
+		bool AllowCoroutine => false;
 	}
 
 	/// <summary>
@@ -427,11 +455,11 @@ namespace MaxyGames.UNode {
 		/// <summary>
 		/// Called before code generator is initialized
 		/// </summary>
-		void OnPreInitializer();
+		void OnPreInitializer() { }
 		/// <summary>
 		/// Called after code generator is initialized
 		/// </summary>
-		void OnPostInitializer();
+		void OnPostInitializer() { }
 	}
 
 	/// <summary>
@@ -447,21 +475,39 @@ namespace MaxyGames.UNode {
 	/// <summary>
 	/// An interface for SuperNode / Group Node
 	/// </summary>
-	public interface ISuperNode {
-		IEnumerable<NodeObject> nestedFlowNodes { get; }
+	public interface ISuperNode : INodeWithConnection {
+		/// <summary>
+		/// The nested flow node, usually this is a entry points
+		/// </summary>
+		IEnumerable<NodeObject> NestedFlowNodes { get; }
+		/// <summary>
+		/// The supported scope, multiple scope is supported separated by `,` or `|`.
+		/// </summary>
 		string SupportedScope => NodeScope.FlowGraph;
+		/// <summary>
+		/// Are coroutine is supported inside this node?
+		/// </summary>
+		/// <returns></returns>
 		bool AllowCoroutine();
+		IEnumerable<NodeObject> INodeWithConnection.Connections => NestedFlowNodes;
 	}
 
-	public interface ISuperNodeWithEntry : ISuperNode {
-		public Nodes.NestedEntryNode Entry { get; }
-		public string EntryName => "Entry";
-
-		void RegisterEntry(Nodes.NestedEntryNode node);
+	public interface IElementWithEntry {
+		public BaseEntryNode Entry { get; }
+		public void RegisterEntry(BaseEntryNode node) { }
 	}
 
-	public interface IStackedNode {
-		IEnumerable<NodeObject> stackedNodes { get; }
+	public interface ISuperNodeWithEntry : ISuperNode, IElementWithEntry {
+		IEnumerable<NodeObject> INodeWithConnection.Connections => NestedFlowNodes.Append(Entry);
+	}
+
+	public interface INodeWithConnection {
+		IEnumerable<NodeObject> Connections { get; }
+	}
+
+	public interface IStackedNode : INodeWithConnection {
+		IEnumerable<NodeObject> StackedNodes { get; }
+		IEnumerable<NodeObject> INodeWithConnection.Connections => StackedNodes;
 	}
 
 	public interface IRerouteNode {

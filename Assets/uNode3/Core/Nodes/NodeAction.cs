@@ -6,12 +6,12 @@ using System.Collections;
 using System.Collections.Generic;
 
 namespace MaxyGames.UNode.Nodes {
-	[NodeMenu("Flow", "Action", order = -1, icon = typeof(TypeIcons.ActionIcon))]
+	[NodeMenu("Flow", "Action", order = -1, icon = typeof(TypeIcons.ActionIcon), hasFlowInput = true, hasFlowOutput = true)]
 	public class NodeAction : FlowNode, IStackedNode {
 		[HideInInspector]
 		public BlockData data = new BlockData();
 
-		public IEnumerable<NodeObject> stackedNodes => data.GetFlowNodes();
+		public IEnumerable<NodeObject> StackedNodes => data.GetFlowNodes();
 
 		protected override void OnRegister() {
 			data.Register(this);
@@ -37,7 +37,7 @@ namespace MaxyGames.UNode.Nodes {
 
 		protected override string GenerateFlowCode() {
 			string contents = null;
-			foreach(var node in stackedNodes) {
+			foreach(var node in StackedNodes) {
 				if(node.primaryFlowInput != null) {
 					contents += CG.GeneratePort(node.primaryFlowInput).AddLineInFirst();
 				}

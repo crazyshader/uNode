@@ -13,12 +13,12 @@ namespace MaxyGames.UNode.Nodes {
 		public bool returnAnyType = false;
 
 		protected override void OnRegister() {
-			if(GetNodeIcon() != typeof(void)) {
-				value = ValueInput(nameof(value), GetNodeIcon);
-			}
 			enter = PrimaryFlowInput(nameof(enter), (flow) => {
 				flow.jumpStatement = new JumpStatement(nodeObject, JumpStatementType.Return, GetNodeIcon() != typeof(void) ? value.GetValue(flow) : null);
 			});
+			if(GetNodeIcon() != typeof(void)) {
+				value = ValueInput(nameof(value), GetNodeIcon);
+			}
 		}
 
 		public override void OnGeneratorInitialize() {
@@ -73,20 +73,14 @@ namespace MaxyGames.UNode.Nodes {
 							}
 						}
 						else {
-							if(node is NodeLambda lambda) {
-								var result = lambda.ReturnType();
-								if(result == null)
-									result = typeof(void);
-								else {
-									if(result.IsCastableTo(typeof(Delegate))) {
-										var methodInfo = result.GetMethod("Invoke");
-										return methodInfo.ReturnType;
-									}
+							if(node is BaseEntryNode) {
+								var parent = (node as BaseEntryNode).nodeObject.parent;
+								if(parent is BaseFunction func) {
+									return func.ReturnType() ?? typeof(void);
 								}
-								return result;
 							}
-							else if(node is NodeAnonymousFunction anon) {
-								var result = anon.ReturnType();
+							else if(node is NodeLambda || node is NodeAnonymousFunction) {
+								var result = node.nodeObject.ReturnType();
 								if(result == null)
 									result = typeof(void);
 								else {

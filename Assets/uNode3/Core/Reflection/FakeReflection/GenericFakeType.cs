@@ -155,6 +155,9 @@ namespace MaxyGames.UNode {
 				if(type is IRuntimeType prType) {
 					return prType.GetNativeType() ?? typeof(IRuntimeClass);
 				}
+				else if(type is INativeType nType) {
+					return nType.GetNativeType() ?? (type.IsValueType ? typeof(int) : typeof(object));
+				}
 				else {
 					return typeof(IRuntimeClass);
 				}
@@ -533,7 +536,12 @@ namespace MaxyGames.UNode {
 						}
 					}
 				}
-				return type.MakeGenericType(param);
+				try {
+					return type.MakeGenericType(param);
+				}
+				catch(Exception ex) {
+					UnityEngine.Debug.LogError("Error on getting generic type: " + type + "\n" + ex.Message);
+				}
 			}
 			return type;
 		}

@@ -13,20 +13,20 @@ namespace MaxyGames.UNode.Editors {
 	public class MacroNodeView : BaseNodeView {
 		public override void BuildContextualMenu(ContextualMenuPopulateEvent evt) {
 			evt.menu.AppendAction("Open Macro", (e) => {
-				owner.graph.graphData.currentCanvas = targetNode.nodeObject;
-				owner.graph.Refresh();
-				owner.graph.UpdatePosition();
+				owner.graphEditor.graphData.currentCanvas = targetNode.nodeObject;
+				owner.graphEditor.Refresh();
+				owner.graphEditor.UpdatePosition();
 			}, DropdownMenuAction.AlwaysEnabled);
 			base.BuildContextualMenu(evt);
 		}
 
-		protected override void InitializeView() {
-			base.InitializeView();
+		protected override void OnReloadView() {
+			base.OnReloadView();
 			titleContainer.RegisterCallback<MouseDownEvent>(e => {
 				if(e.button == 0 && e.clickCount == 2) {
-					owner.graph.graphData.currentCanvas = targetNode.nodeObject;
-					owner.graph.Refresh();
-					owner.graph.UpdatePosition();
+					owner.graphEditor.graphData.currentCanvas = targetNode.nodeObject;
+					owner.graphEditor.Refresh();
+					owner.graphEditor.UpdatePosition();
 				}
 			});
 		}

@@ -101,14 +101,14 @@ namespace MaxyGames.UNode.Nodes {
 				foreach(var p in macroAsset.InputValues) {
 					var macroPort = p;
 					inputValues.Add(
-						ValueInput(macroPort.id.ToString(), macroPort.ReturnType()).SetName(macroPort.GetTitle()).SetTooltip(macroPort.comment)
+						ValueInput(macroPort.id.ToString(), () => macroPort.type ?? typeof(object)).SetName(macroPort.GetTitle()).SetTooltip(macroPort.comment)
 					);
 				}
 				needSetPrimary = true;
 				//Initialize Value Outputs
 				foreach(var p in macroAsset.OutputValues) {
 					var macroPort = p;
-					var port = ValueOutput(macroPort.id.ToString(), macroPort.ReturnType(), PortAccessibility.ReadWrite).SetName(macroPort.GetTitle());
+					var port = ValueOutput(macroPort.id.ToString(), () => macroPort.type ?? typeof(object), PortAccessibility.ReadWrite).SetName(macroPort.GetTitle());
 					port.AssignGetCallback(instance => {
 						var data = instance.GetElementData<LinkedData>(this);
 						if(data == null) {
@@ -169,6 +169,8 @@ namespace MaxyGames.UNode.Nodes {
 			graph.ForeachInChildrens(element => {
 				element.OnRuntimeInitialize(instance);
 			}, true);
+			instance.eventData.PostInitialize(instance);
+
 			var elementData = new LinkedData();
 			int index = 0;
 			//Initialize Flow Inputs
@@ -259,7 +261,7 @@ namespace MaxyGames.UNode.Nodes {
 			graph.ForeachInChildrens(element => {
 				if(element is NodeObject nodeObject) {
 					if(nodeObject.node is MacroPortNode) {
-						CG.RegisterEntry(nodeObject);
+						CG.RegisterDependency(nodeObject);
 					}
 				}
 			}, true);
@@ -268,25 +270,25 @@ namespace MaxyGames.UNode.Nodes {
 				CG.RegisterAsRegularNode(port);
 				foreach(var con in port.connections) {
 					if(con.isValid == false) continue;
-					CG.RegisterEntry(con.output.node);
+					CG.RegisterDependency(con.output.node);
 				}
 			}
 			foreach(var port in outputFlows) {
 				foreach(var con in port.connections) {
 					if(con.isValid == false) continue;
-					CG.RegisterEntry(con.input.node);
+					CG.RegisterDependency(con.input.node);
 				}
 			}
 			foreach(var port in inputValues) {
 				foreach(var con in port.connections) {
 					if(con.isValid == false) continue;
-					CG.RegisterEntry(con.output.node);
+					CG.RegisterDependency(con.output.node);
 				}
 			}
 			foreach(var port in outputValues) {
 				foreach(var con in port.connections) {
 					if(con.isValid == false) continue;
-					CG.RegisterEntry(con.input.node);
+					CG.RegisterDependency(con.input.node);
 				}
 			}
 

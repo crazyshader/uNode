@@ -218,6 +218,13 @@ namespace MaxyGames.UNode.Editors {
 									referenceChanged = true;
 								}
 							}
+							else if(references[i] is UReference uref) {
+								graphElement = uref.GetGraphElement();
+								if(!oldGuids.Contains(graphElement.id) && ValidateReference(graphElement, out var validElement)) {
+									uref.SetGraphElement(validElement);
+									referenceChanged = true;
+								}
+							}
 						}
 
 						if(referenceChanged) {
@@ -246,16 +253,11 @@ namespace MaxyGames.UNode.Editors {
 												};
 											}
 										}
-										else if(item.reference is ParameterRef parameterRef) {
-											if(ValidateReference(parameterRef.reference, out var validElement)) {
+										else if(item.reference is UReference) {
+											var uref = item.reference as UReference;
+											if(ValidateReference(uref.GetGraphElement(), out var validElement)) {
 												postAction += () => {
-													var reference = item.reference;
-													if(reference is UReference) {
-														(reference as UReference).SetGraphElement(validElement);
-													}
-													else {
-														throw new InvalidOperationException();
-													}
+													uref.SetGraphElement(validElement);
 												};
 											}
 										}
@@ -267,6 +269,14 @@ namespace MaxyGames.UNode.Editors {
 								if(self != parent.graphContainer) {
 									mData.CopyFrom(MemberData.This(parent.graphContainer));
 								}
+							}
+						}
+						else if(obj is UReference) {
+							var uref = obj as UReference;
+							if(ValidateReference(uref.GetGraphElement(), out var validElement)) {
+								postAction += () => {
+									uref.SetGraphElement(validElement);
+								};
 							}
 						}
 						return false;
@@ -1180,7 +1190,7 @@ namespace MaxyGames.UNode.Editors {
 			ShowReferencesInWindow(references);
 		}
 
-		public static void GoToDefinition(MemberInfo info) {
+		public static void GoToDefinition(MemberInfo info, string path = null) {
 			if(info is IRuntimeMember) {
 				var reference = info as IRuntimeMemberWithRef;
 				if(reference == null) {
@@ -1236,19 +1246,19 @@ namespace MaxyGames.UNode.Editors {
 				foreach(var t in runtimeTypes) {
 					if(t is INativeType nativeType && nativeType.GetNativeType() == type) {
 						if(info is Type) {
-							GoToDefinition(t);
+							GoToDefinition(t, path);
 							return;
 						}
 						var members = t.GetMember(info.Name);
 						if(members.Length == 1) {
-							GoToDefinition(members[0]);
+							GoToDefinition(members[0], path);
 						}
 						else {
 							foreach(var m in members) {
 								if(m is INativeMember member) {
 									var nativeMember = member.GetNativeMember();
 									if(nativeMember == info) {
-										GoToDefinition(m);
+										GoToDefinition(m, path);
 										return;
 									}
 								}
@@ -1258,6 +1268,17 @@ namespace MaxyGames.UNode.Editors {
 					}
 				}
 
+				if(!string.IsNullOrEmpty(path) && File.Exists(path)) {
+					int line = 0;
+					try {
+						line = RoslynUtility.GetLineForMember(info, path);
+					}
+					catch { }
+					if(line >= 0) {
+						UnityEditorInternal.InternalEditorUtility.OpenFileAtLineExternal(path, line);
+					}
+					return;
+				}
 				MonoScript mono = uNodeEditorUtility.GetMonoScript(type);
 				if(mono != null) {
 					//AssetDatabase.OpenAsset(mono);
@@ -1741,7 +1762,7 @@ namespace MaxyGames.UNode.Editors {
 		/// <param name="destroyRoot"></param>
 		public static void SaveAllGraph() {
 			//AssetDatabase.SaveAssets();
-			var assets = FindAllGraphAssets().ToArray();
+			var assets = FindAllGraphAssets(path => AssetDatabase.IsMainAssetAtPathLoaded(path)).ToArray();
 			List<string> assetPath = new List<string>();
 			foreach(var asset in assets) {
 				if(EditorUtility.IsDirty(asset)) {
@@ -1757,7 +1778,15 @@ namespace MaxyGames.UNode.Editors {
 			}
 		}
 
-		internal static void CreateBackup(IEnumerable<string> assets, string directory = "Graphs") {
+		/// <summary>
+		/// Create a backup for all graphs
+		/// </summary>
+		/// <param name="directory"></param>
+		internal static void CreateFullBackup(string directory = "Graphs-FullBackup") {
+			CreateBackup(FindAllGraphAssets().Where(obj => AssetDatabase.IsMainAsset(obj)).Select(obj => AssetDatabase.GetAssetPath(obj)), directory, 10);
+		}
+
+		internal static void CreateBackup(IEnumerable<string> assets, string directory = "Graphs", int maxBackup = -1) {
 			var dic = uNodePreference.backupPath + Path.DirectorySeparatorChar + directory;
 			Directory.CreateDirectory(dic);
 			string fileName = DateTime.Now.ToString("yyyy-dd-M--HH-mm-ss") + "---" + Path.GetRandomFileName() + ".zip";
@@ -1769,7 +1798,7 @@ namespace MaxyGames.UNode.Editors {
 						}
 					}
 				}
-				RemoveBackup(directory, uNodePreference.preferenceData.maxGraphBackup);
+				RemoveBackup(directory, maxBackup > 0 ? maxBackup : uNodePreference.preferenceData.maxGraphBackup);
 			}
 			catch(Exception ex) {
 				Debug.LogError("Create backup error: " + ex.ToString());
@@ -1971,9 +2000,28 @@ namespace MaxyGames.UNode.Editors {
 			}
 		}
 
+		public static void RefactorElementName(Vector2 mousePosition, UGraphElement element, Action onRenamed) {
+			string tempName = element.name;
+			ActionPopupWindow.Show(
+				() => {
+					tempName = EditorGUILayout.TextField("Name", tempName);
+				},
+				onGUIBottom: () => {
+					if(GUILayout.Button("Apply") || Event.current.keyCode == KeyCode.Return) {
+						if(tempName != element.name) {
+							uNodeEditorUtility.RegisterUndo(element, "Rename: " + element.name);
+							element.name = GetUniqueName(tempName, element.graph);
+							uNodeGUIUtility.GUIChangedMajor(element);
+							onRenamed?.Invoke();
+						}
+						ActionPopupWindow.CloseLast();
+					}
+				}).ChangePosition(mousePosition).headerName = "Rename";
+		}
+
 		public static void RefactorFunctionName(Vector2 mousePosition, Function function, Action onRenamed) {
 			string tempName = function.name;
-			ActionPopupWindow.Show(Vector2.zero,
+			ActionPopupWindow.Show(
 				() => {
 					tempName = EditorGUILayout.TextField("Function Name", tempName);
 				},
@@ -1992,7 +2040,7 @@ namespace MaxyGames.UNode.Editors {
 
 		public static void RefactorPropertyName(Vector2 mousePosition, Property property, Action onRenamed) {
 			string tempName = property.name;
-			ActionPopupWindow.Show(Vector2.zero,
+			ActionPopupWindow.Show(
 				() => {
 					tempName = EditorGUILayout.TextField("Property Name", tempName);
 				},
@@ -2011,7 +2059,7 @@ namespace MaxyGames.UNode.Editors {
 
 		public static void RefactorVariableName(Vector2 mousePosition, Variable variable, Action onRenamed) {
 			string tempName = variable.name;
-			ActionPopupWindow.Show(Vector2.zero,
+			ActionPopupWindow.Show(
 				() => {
 					tempName = EditorGUILayout.TextField("Variable Name", tempName);
 				},
@@ -2051,15 +2099,13 @@ namespace MaxyGames.UNode.Editors {
 		/// Find all graphs assets ( <see cref="IGraph"/>, <see cref="IScriptGraph"/> )
 		/// </summary>
 		/// <returns></returns>
-		public static IEnumerable<Object> FindAllGraphAssets() {
-			var assets = uNodeEditorUtility.FindAssetsByType<ScriptableObject>(type => {
-				return type.IsCastableTo(typeof(IGraph)) || type.IsCastableTo(typeof(IScriptGraph));
+		public static IEnumerable<Object> FindAllGraphAssets(Func<string, bool> validation = null) {
+			var assets = uNodeEditorUtility.FindAssetsByType<ScriptableObject>(path => {
+				var type = AssetDatabase.GetMainAssetTypeAtPath(path);
+				return type.IsCastableTo(typeof(IGraph)) || type.IsCastableTo(typeof(IScriptGraph)) && (validation == null || validation(path));
 			});
 			foreach(var asset in assets) {
 				yield return asset;
-				//if(asset is IGraph || asset is IScriptGraph) {
-				//	yield return asset;
-				//}
 			}
 		}
 
@@ -2070,9 +2116,10 @@ namespace MaxyGames.UNode.Editors {
 		/// This will including <see cref="IGraph"/>, <see cref="IScriptGraph"/> and all nested graphs.
 		/// </remarks>
 		/// <returns></returns>
-		public static IEnumerable<UnityEngine.Object> FindAllGraphIncludingNestedGraphs() {
-			var assets = uNodeEditorUtility.FindAssetsByType<ScriptableObject>(type => {
-				return type.IsCastableTo(typeof(IGraph)) || type.IsCastableTo(typeof(IScriptGraph));
+		public static IEnumerable<UnityEngine.Object> FindAllGraphIncludingNestedGraphs(Func<string, bool> validation = null) {
+			var assets = uNodeEditorUtility.FindAssetsByType<ScriptableObject>(path => {
+				var type = AssetDatabase.GetMainAssetTypeAtPath(path);
+				return type.IsCastableTo(typeof(IGraph)) || type.IsCastableTo(typeof(IScriptGraph)) && (validation == null || validation(path));
 			});
 			foreach(var asset in assets) {
 				if(asset is IGraph) {

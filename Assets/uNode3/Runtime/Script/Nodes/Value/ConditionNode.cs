@@ -7,14 +7,14 @@ namespace MaxyGames.UNode.Nodes {
 		[Hide]
 		public BlockData data = new BlockData();
 
-		public IEnumerable<NodeObject> stackedNodes => data.GetNodes();
+		public IEnumerable<NodeObject> StackedNodes => data.GetNodes();
 
 		protected override void OnRegister() {
 			data.Register(this);
 			base.OnRegister();
 		}
 
-		public override System.Type ReturnType() {
+		protected override System.Type ReturnType() {
 			return typeof(bool);
 		}
 

@@ -17,6 +17,8 @@ namespace MaxyGames.UNode.Editors {
 
 		public override bool fullReload => true;
 
+		public override UGraphElement GetSelectableObject() => transition;
+
 		public override void Initialize(UGraphView owner, NodeObject node) {
 			nodeObject = node;
 			this.transition = node.node as TransitionEvent;
@@ -27,14 +29,15 @@ namespace MaxyGames.UNode.Editors {
 			node.Register();
 			ReloadView();
 
-			border.style.overflow = Overflow.Visible;
+			border.style.overflow = StyleKeyword.Null;
+			//border.style.overflow = Overflow.Visible;
 
 			titleIcon.RemoveFromHierarchy();
 			m_CollapseButton.RemoveFromHierarchy();
 
 			RegisterCallback<MouseDownEvent>((e) => {
 				if(e.button == 0 && e.clickCount == 2) {
-					ActionPopupWindow.Show(owner.GetScreenMousePosition(e), transition.name,
+					ActionPopupWindow.Show(transition.name,
 						(ref object obj) => {
 							object str = EditorGUILayout.TextField(obj as string);
 							if(obj != str) {
@@ -44,7 +47,7 @@ namespace MaxyGames.UNode.Editors {
 									uNodeGUIUtility.GUIChanged(transition, UIChangeType.Average);
 								}
 							}
-						}).headerName = "Edit name";
+						}).ChangePosition(owner.GetScreenMousePosition(e)).headerName = "Edit name";
 					e.StopImmediatePropagation();
 				}
 			});
@@ -183,7 +186,7 @@ namespace MaxyGames.UNode.Editors {
 			if(blocks != null) {
 				this.blocks = blocks;
 				this.blockType = blockType;
-				border.SetToNoClipping();
+				//border.SetToNoClipping();
 				for(int i = 0; i < blocks.childCount; i++) {
 					var obj = blocks.GetChild(i) as NodeObject;
 					if(obj == null)

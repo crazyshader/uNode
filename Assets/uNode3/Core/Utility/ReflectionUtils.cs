@@ -1286,14 +1286,6 @@ namespace MaxyGames.UNode {
 			return type.GetFields(flags);
 		}
 
-		public static FieldInfo[] GetFields(object obj, BindingFlags flags = BindingFlags.Public | BindingFlags.Instance) {
-			return obj.GetType().GetFields(flags);
-		}
-
-		public static PropertyInfo[] GetProperties(object obj, BindingFlags flags = BindingFlags.Public | BindingFlags.Instance) {
-			return obj.GetType().GetProperties(flags);
-		}
-
 		public static bool IsPublicMember(MemberInfo member) {
 			switch(member.MemberType) {
 				case MemberTypes.Constructor:
@@ -2369,7 +2361,12 @@ namespace MaxyGames.UNode {
 						}
 						else {
 							for(int i = 0; i < pType.Length; i++) {
-								if(pType[i] != typeof(ValueType) && !pType[i].IsInterface && preferedType.IsCastableTo(pType[i])) {
+								if(pType[i] == typeof(ValueType)) {
+									if(preferedType.IsValueType) {
+										return preferedType;
+									}
+								}
+								else if(!pType[i].IsInterface && preferedType.IsCastableTo(pType[i])) {
 									return preferedType;
 								}
 							}

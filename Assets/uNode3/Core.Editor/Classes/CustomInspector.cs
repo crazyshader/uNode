@@ -51,7 +51,7 @@ namespace MaxyGames.UNode.Editors {
 					DrawGraphInspector(editorData.graph);
 					if(editorData.currentCanvas is not MainGraphContainer) {
 						EditorGUILayout.LabelField("", GUI.skin.horizontalSlider);
-						EditorGUI.DropShadowLabel(uNodeGUIUtility.GetRect(), "Edited Canvas");
+						EditorGUI.DropShadowLabel(uNodeGUIUtility.GetRect(), "Canvas");
 						EditorGUILayout.Space();
 						var bind = UBind.FromGraphElement(editorData.currentCanvas);
 						if(editorData.currentCanvas is NodeObject nodeObject && nodeObject.node != null) {
@@ -198,20 +198,14 @@ namespace MaxyGames.UNode.Editors {
 		}
 
 		public static void Inspect(Vector2 position, GraphEditorData editorData, int limitMultiEdit = 5) {
-			ActionPopupWindow.Show(Vector2.zero, () => {
+			ActionPopupWindow.Show(() => {
 				ShowInspector(editorData);
-			}).ChangePosition(position).autoFocus = false;
-		}
-
-		public static void Inspect(Vector2 position, object value, UnityEngine.Object unityObject = null) {
-			ActionPopupWindow.Show(Vector2.zero, () => {
-				uNodeGUIUtility.ShowFields(value, unityObject);
-			}).ChangePosition(position).autoFocus = false;
+			}).ChangePosition(position);
 		}
 
 		private static void RenameObject(UnityEngine.Object obj, Rect rect) {
 			string name = obj.name;
-			ActionPopupWindow.Show(rect.ToScreenRect(),
+			ActionPopupWindow.Show(
 				onGUI: () => {
 					name = EditorGUILayout.TextField("Name", name);
 				},
@@ -231,12 +225,12 @@ namespace MaxyGames.UNode.Editors {
 						ActionPopupWindow.CloseLast();
 						uNodeGUIUtility.GUIChangedMajor(obj);
 					}
-				});
+				}).ChangePosition(rect.ToScreenRect());
 		}
 
 		private static void RenameNode(NodeObject node, Rect rect) {
 			string name = node.name;
-			ActionPopupWindow.Show(rect.ToScreenRect(),
+			ActionPopupWindow.Show(
 				onGUI: () => {
 					name = EditorGUILayout.TextField("Name", name);
 				},
@@ -247,7 +241,7 @@ namespace MaxyGames.UNode.Editors {
 						ActionPopupWindow.CloseLast();
 						uNodeGUIUtility.GUIChanged(node);
 					}
-				});
+				}).ChangePosition(rect.ToScreenRect());
 		}
 
 		// private static void DrawLine(float height = 1, float expandingWidth = 15) {
@@ -355,7 +349,7 @@ namespace MaxyGames.UNode.Editors {
 				}
 				EditorGUILayout.EndHorizontal();
 				GUILayout.Space(2);
-				var comment = uNodeGUI.TextInput(graphData.comment, "(Summary)", true);
+				var comment = uNodeGUI.TextInput(graphData.comment, "(Summary)", true, false, EditorStyles.textArea);
 				if(comment != graphData.comment) {
 					if(graph is UnityEngine.Object)
 						uNodeEditorUtility.RegisterUndo(graph as UnityEngine.Object);

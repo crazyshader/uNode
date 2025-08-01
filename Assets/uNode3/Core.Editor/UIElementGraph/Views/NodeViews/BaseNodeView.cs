@@ -12,7 +12,6 @@ namespace MaxyGames.UNode.Editors {
 	public class BaseNodeView : UNodeView {
 
 		protected VisualElement debugView;
-		protected VisualElement debugStateView;
 
 		private Image compactIcon = null;
 
@@ -60,16 +59,7 @@ namespace MaxyGames.UNode.Editors {
 		/// <summary>
 		/// Called inside ReloadView
 		/// </summary>
-		protected virtual void InitializeView() {
-			if(nodeObject.node is ISuperNode) {
-				titleContainer.RegisterCallback<MouseDownEvent>(e => {
-					if(e.button == 0 && e.clickCount == 2) {
-						owner.graph.graphData.currentCanvas = targetNode.nodeObject;
-						owner.graph.Refresh();
-						owner.graph.UpdatePosition();
-					}
-				});
-			}
+		protected virtual void OnReloadView() {
 			InitializeDefaultPorts();
 		}
 
@@ -105,6 +95,20 @@ namespace MaxyGames.UNode.Editors {
 		#endregion
 
 		#region Functions
+		protected override void OnSetup() {
+			base.OnSetup();
+			
+			if(nodeObject.node is ISuperNode) {
+				titleContainer.RegisterCallback<MouseDownEvent>(e => {
+					if(e.button == 0 && e.clickCount == 2) {
+						owner.graphEditor.graphData.currentCanvas = targetNode.nodeObject;
+						owner.graphEditor.Refresh();
+						owner.graphEditor.UpdatePosition();
+					}
+				});
+			}
+		}
+
 		public override void ReloadView() {
 			try {
 				base.ReloadView();
@@ -116,7 +120,7 @@ namespace MaxyGames.UNode.Editors {
 				}
 				if(titleIcon != null)
 					titleIcon.image = uNodeEditorUtility.GetTypeIcon(nodeObject.GetNodeIcon());
-				InitializeView();
+				OnReloadView();
 			}
 			catch(Exception ex) {
 				if(ex is GraphException) {
@@ -133,40 +137,105 @@ namespace MaxyGames.UNode.Editors {
 				debugView = new VisualElement() {
 					name = "debug-container"
 				};
+				debugView.pickingMode = PickingMode.Ignore;
 				//titleButtonContainer.Add(debugView);
 				
 				this.Add(debugView);
 			}
 			if(Application.isPlaying && primaryInputFlow != null) {
-				this.RegisterRepaintAction(() => {
-					var debugData = owner.graph.GetDebugInfo();
+
+				int lastState = -1;
+				VisualElement debugElement = null;
+				void UpdateState(int state) {
+					if(lastState != state || debugElement == null) {
+						if(debugElement == null) {
+							debugElement = new VisualElement() {
+								name = "node-running-status",
+								pickingMode = PickingMode.Ignore,
+							};
+							this.Add(debugElement);
+						}
+						else {
+							if(lastState == 0) {
+								//Running
+								this.RemoveFromClassList("node-debug-running");
+								debugElement.RemoveFromClassList("highlight-debug-running");
+							}
+							else if(lastState == 1) {
+								this.RemoveFromClassList("node-debug-success");
+								debugElement.RemoveFromClassList("highlight-debug-success");
+							}
+							else if(lastState == 2) {
+								this.RemoveFromClassList("node-debug-failure");
+								debugElement.RemoveFromClassList("highlight-debug-failure");
+							}
+						}
+						if(state == 0) {
+							//Running
+							this.AddToClassList("node-debug-running");
+							debugElement.AddToClassList("highlight-debug-running");
+						}
+						else if(state == 1) {
+							this.AddToClassList("node-debug-success");
+							debugElement.AddToClassList("highlight-debug-success");
+						}
+						else if(state == 2) {
+							this.AddToClassList("node-debug-failure");
+							debugElement.AddToClassList("highlight-debug-failure");
+						}
+						lastState = state;
+					}
+				}
+
+				this.ScheduleActionUntil(() => {
+					if(isHidden || this.IsVisible() == false) return;
+					var debugData = owner.graphEditor.GetDebugInfo();
 					if(debugData != null) {
 						var nodeDebug = debugData.GetDebugValue(primaryInputFlow.GetPortValue<FlowInput>());
 						if(nodeDebug != null) {
 							var layout = new Rect(5, -8, 8, 8);
 							switch(nodeDebug.nodeState) {
 								case StateType.Success:
-									GUI.DrawTexture(layout, Texture2D.whiteTexture, ScaleMode.ScaleAndCrop, true, 0, 
-										Color.Lerp(
-											UIElementUtility.Theme.nodeRunningColor,
-											UIElementUtility.Theme.nodeSuccessColor,
-											(GraphDebug.debugTime - nodeDebug.time) * GraphDebug.transitionSpeed * 4), 0, 0);
+									if(GraphDebug.debugTime - nodeDebug.time > 0.1f) {
+										UpdateState(1);
+									}
+									else {
+										UpdateState(0);
+									}
+									//GUI.DrawTexture(layout, Texture2D.whiteTexture, ScaleMode.ScaleAndCrop, true, 0, 
+									//	Color.Lerp(
+									//		UIElementUtility.Theme.nodeRunningColor,
+									//		UIElementUtility.Theme.nodeSuccessColor,
+									//		(GraphDebug.debugTime - nodeDebug.time) * GraphDebug.transitionSpeed * 4), 0, 0);
 									break;
 								case StateType.Failure:
-									GUI.DrawTexture(layout, Texture2D.whiteTexture, ScaleMode.ScaleAndCrop, true, 0,
-										Color.Lerp(
-											UIElementUtility.Theme.nodeRunningColor,
-											UIElementUtility.Theme.nodeFailureColor,
-											(GraphDebug.debugTime - nodeDebug.time) * GraphDebug.transitionSpeed * 4), 0, 0);
+									if(GraphDebug.debugTime - nodeDebug.time > 0.1f) {
+										UpdateState(2);
+									}
+									else {
+										UpdateState(0);
+									}
+									//GUI.DrawTexture(layout, Texture2D.whiteTexture, ScaleMode.ScaleAndCrop, true, 0,
+									//	Color.Lerp(
+									//		UIElementUtility.Theme.nodeRunningColor,
+									//		UIElementUtility.Theme.nodeFailureColor,
+									//		(GraphDebug.debugTime - nodeDebug.time) * GraphDebug.transitionSpeed * 4), 0, 0);
 									break;
 								case StateType.Running:
-									GUI.DrawTexture(layout, Texture2D.whiteTexture, ScaleMode.ScaleAndCrop, true, 0,
-										UIElementUtility.Theme.nodeRunningColor, 0, 0);
+									UpdateState(0);
+									//GUI.DrawTexture(layout, Texture2D.whiteTexture, ScaleMode.ScaleAndCrop, true, 0,
+									//	UIElementUtility.Theme.nodeRunningColor, 0, 0);
 									break;
 							}
 						}
+						else {
+							UpdateState(-1);
+						}
 					}
-				});
+					else {
+						UpdateState(-1);
+					}
+				}, static () => false);
 			}
 			if(debugView != null) {
 				this.ExecuteAndScheduleAction(() => {
@@ -193,28 +262,32 @@ namespace MaxyGames.UNode.Editors {
 
 			#region Node Styles
 			if(border != null) {
-				border.SetToNoClipping();
+				//border.SetToNoClipping();
+				border.style.overflow = StyleKeyword.Null;
 				if(!isBlock) {
-					int flowInputCount = inputPorts.Count((p) => p.isFlow);
-					int flowOutputCount = outputPorts.Count((p) => p.isFlow);
-					if(flowInputCount + flowOutputCount > 0) {
+					var anyFlowInput = inputPorts.Any((p) => p.isFlow);
+					var anyFlowOutput = outputPorts.Any((p) => p.isFlow);
+					if(anyFlowInput || anyFlowOutput) {
 						bool flag = outputPorts.Count((p) => p.isFlow && !string.IsNullOrEmpty(p.GetName())) == 0;
 						border.EnableInClassList(ussClassBorderFlowNode, true);
-						if(flowOutputCount == 0 || flag) {
+						if(anyFlowOutput == false || flag) {
 							border.EnableInClassList(ussClassBorderOnlyInput, true);
 							border.EnableInClassList(ussClassBorderOnlyOutput, false);
-						} else if(flowInputCount == 0) {
+						} else if(anyFlowInput == false) {
 							border.EnableInClassList(ussClassBorderOnlyInput, false);
 							border.EnableInClassList(ussClassBorderOnlyOutput, true);
 						} else {
 							border.EnableInClassList(ussClassBorderOnlyInput, false);
 							border.EnableInClassList(ussClassBorderOnlyOutput, false);
 						}
-						portInputContainer.EnableInClassList("flow", flowInputCount > 0);
+						portInputContainer.EnableInClassList("flow", anyFlowInput);
 					} else {
 						border.EnableInClassList(ussClassBorderFlowNode, false);
 					}
-				} else {
+					border.EnableInClassList(ussClassBorderHasInputValue, inputPorts.Any(p => p.isValue));
+					border.EnableInClassList(ussClassBorderHasOutputValue, outputPorts.Any(p => p.isValue));
+				}
+				else {
 					border.EnableInClassList(ussClassBorderFlowNode, false);
 				}
 			}
@@ -429,30 +502,6 @@ namespace MaxyGames.UNode.Editors {
 					}
 				}
 			}
-		}
-
-		/// <summary>
-		/// Do update every 0.5 second.
-		/// </summary>
-		protected virtual void DoUpdate() {
-			if(!this.IsVisible())
-				return;
-			#region Errors
-			var errors = GraphUtility.ErrorChecker.GetErrorMessages(nodeObject, InfoType.Error);
-			if(errors != null && errors.Any()) {
-				System.Text.StringBuilder sb = new System.Text.StringBuilder();
-				foreach(var error in errors) { 
-					if(sb.Length > 0) {
-						sb.AppendLine();
-						sb.AppendLine();
-					}
-					sb.Append("-" + uNodeEditorUtility.RemoveHTMLTag(error.message));
-				}
-				UpdateError(sb.ToString());
-			} else {
-				UpdateError(string.Empty);
-			}
-			#endregion
 		}
 		#endregion
 	}

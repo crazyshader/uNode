@@ -9,6 +9,7 @@ using System.Collections.Generic;
 namespace MaxyGames.UNode.Editors {
 	public static class EditorReflectionUtility {
 		private static Dictionary<Type, FieldInfo[]> fieldsInfoMap = new Dictionary<Type, FieldInfo[]>();
+		private static Dictionary<(Type, BindingFlags), FieldInfo[]> fieldsInfoMap2 = new();
 		private static Dictionary<MemberInfo, object[]> attributesMap = new Dictionary<MemberInfo, object[]>();
 		private static Dictionary<Assembly, HashSet<string>> assemblyNamespaces = new Dictionary<Assembly, HashSet<string>>();
 		private static Dictionary<Assembly, List<MethodInfo>> extensionsMap = new Dictionary<Assembly, List<MethodInfo>>();
@@ -443,8 +444,24 @@ namespace MaxyGames.UNode.Editors {
 		/// <returns></returns>
 		public static IEnumerable<Type> GetSubClassesOfType<T>() where T : class {
 			foreach(var assembly in GetAssemblies()) {
-				foreach(var type in assembly.GetTypes().Where(t => t.IsClass && !t.IsAbstract && (typeof(T).IsAssignableFrom(t)))) {
+				foreach(var type in GetAssemblyTypes(assembly).Where(t => t.IsClass && !t.IsAbstract && (typeof(T).IsAssignableFrom(t)))) {
 					yield return type;
+				}
+			}
+		}
+
+		/// <summary>
+		/// Return all type that defined attribute <typeparamref name="T"/>
+		/// </summary>
+		/// <typeparam name="T">The attribute type</typeparam>
+		/// <param name="inherit"></param>
+		/// <returns></returns>
+		public static IEnumerable<Type> GetDefinedTypes<T>(bool inherit = false) where T : Attribute {
+			foreach(var assembly in GetAssemblies()) {
+				foreach(var type in GetAssemblyTypes(assembly)) {
+					if(type.IsDefined(typeof(T), inherit)) {
+						yield return type;
+					}
 				}
 			}
 		}
@@ -482,6 +499,26 @@ namespace MaxyGames.UNode.Editors {
 				});
 			}
 			fieldsInfoMap[type] = fields;
+			return fields;
+		}
+
+		public static FieldInfo[] GetFields(Type type, BindingFlags flags) {
+			if(type == null)
+				return null;
+			FieldInfo[] fields;
+			if(fieldsInfoMap2.TryGetValue((type, flags), out fields)) {
+				return fields;
+			}
+			fields = type.GetFields(flags);
+			if(fields.Length > 1) {
+				Array.Sort(fields, (x, y) => {
+					if(x.DeclaringType != y.DeclaringType) {
+						return string.Compare(x.DeclaringType.IsSubclassOf(y.DeclaringType).ToString(), y.DeclaringType.IsSubclassOf(x.DeclaringType).ToString(), StringComparison.OrdinalIgnoreCase);
+					}
+					return string.Compare(x.MetadataToken.ToString(), y.MetadataToken.ToString(), StringComparison.OrdinalIgnoreCase);
+				});
+			}
+			fieldsInfoMap2[(type, flags)] = fields;
 			return fields;
 		}
 
@@ -1366,75 +1403,94 @@ namespace MaxyGames.UNode.Editors {
 		}
 		#endregion
 
-		public static bool AnalizeSerializedObject(object obj, Func<object, bool> validation, Action<object> doAction = null) {
+		public static bool AnalizeSerializedObject(object obj, Func<object, bool> validation, Action<object> doAction = null, HashSet<object> analizedHash = null) {
 			if(object.ReferenceEquals(obj, null) || validation == null)
 				return false;
-			if(!(obj is UnityEngine.Object) && validation(obj)) {
-				if(doAction != null)
-					doAction(obj);
-				if(obj is MemberData) {
-					var mInstane = (obj as MemberData).instance;
-					if(mInstane != null && !(mInstane is UnityEngine.Object)) {
-						if(AnalizeSerializedObject(mInstane, validation, doAction)) {
-							//This make sure to serialize the data.
-							(obj as MemberData).instance = mInstane;
+			bool freeHash = false;
+			try {
+				if(analizedHash == null) {
+					analizedHash = StaticHashPool<object>.Allocate();
+					StaticHashPool<object>.Free(analizedHash);
+					freeHash = true;
+				}
+				if(analizedHash.Contains(obj)) {
+					return false;
+				}
+				else {
+					analizedHash.Add(obj);
+				}
+				if(!(obj is UnityEngine.Object) && validation(obj)) {
+					if(doAction != null)
+						doAction(obj);
+					if(obj is MemberData) {
+						var mInstane = (obj as MemberData).instance;
+						if(mInstane != null && !(mInstane is UnityEngine.Object)) {
+							if(AnalizeSerializedObject(mInstane, validation, doAction, analizedHash)) {
+								//This make sure to serialize the data.
+								(obj as MemberData).instance = mInstane;
+							}
 						}
 					}
+					return true;
 				}
-				return true;
-			}
-			if(obj is MemberData) {
-				MemberData mData = obj as MemberData;
-				if(mData != null && mData.instance != null && !(mData.instance is UnityEngine.Object)) {
-					bool flag = AnalizeSerializedObject(mData.instance, validation, doAction);
-					if(flag) {
-						//This make sure to serialize the data.
-						mData.instance = mData.instance;
+				if(obj is MemberData) {
+					MemberData mData = obj as MemberData;
+					if(mData != null && mData.instance != null && !(mData.instance is UnityEngine.Object)) {
+						bool flag = AnalizeSerializedObject(mData.instance, validation, doAction, analizedHash);
+						if(flag) {
+							//This make sure to serialize the data.
+							mData.instance = mData.instance;
+						}
+						return flag;
 					}
-					return flag;
+					return false;
 				}
-				return false;
-			}
-			bool changed = false;
-			if(obj is IList) {
-				IList list = obj as IList;
-				for(int i = 0; i < list.Count; i++) {
-					object element = list[i];
-					if(element == null)
+				bool changed = false;
+				if(obj is IList) {
+					IList list = obj as IList;
+					for(int i = 0; i < list.Count; i++) {
+						object element = list[i];
+						if(element == null)
+							continue;
+						if(element is UnityEngine.Object) {
+							if(validation(element)) {
+								if(doAction != null)
+									doAction(element);
+								changed = true;
+							}
+							continue;
+						}
+						changed = AnalizeSerializedObject(element, validation, doAction, analizedHash) || changed;
+					}
+					return changed;
+				}
+				FieldInfo[] fieldInfo = GetFields(obj.GetType(), BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+				foreach(FieldInfo field in fieldInfo) {
+					Type fieldType = field.FieldType;
+					if(!fieldType.IsClass || !fieldType.IsSerializable)
 						continue;
-					if(element is UnityEngine.Object) {
-						if(validation(element)) {
+					if(!field.IsPublic && !field.IsDefinedAttribute<SerializeField>() && !field.IsDefinedAttribute<SerializeReference>())
+						continue;
+					object value = field.GetValueOptimized(obj);
+					if(object.ReferenceEquals(value, null))
+						continue;
+					if(value is UnityEngine.Object) {
+						if(validation(value)) {
 							if(doAction != null)
-								doAction(element);
+								doAction(value);
 							changed = true;
 						}
 						continue;
 					}
-					changed = AnalizeSerializedObject(element, validation, doAction) || changed;
+					changed = AnalizeSerializedObject(value, validation, doAction, analizedHash) || changed;
 				}
 				return changed;
 			}
-			FieldInfo[] fieldInfo = ReflectionUtils.GetFields(obj.GetType(), BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
-			foreach(FieldInfo field in fieldInfo) {
-				Type fieldType = field.FieldType;
-				if(!fieldType.IsClass || !fieldType.IsSerializable)
-					continue;
-				if(!field.IsPublic && !field.IsDefinedAttribute<SerializeField>() && !field.IsDefinedAttribute<SerializeReference>())
-					continue;
-				object value = field.GetValueOptimized(obj);
-				if(object.ReferenceEquals(value, null))
-					continue;
-				if(value is UnityEngine.Object) {
-					if(validation(value)) {
-						if(doAction != null)
-							doAction(value);
-						changed = true;
-					}
-					continue;
+			finally {
+				if(freeHash) {
+					StaticHashPool<object>.Free(analizedHash);
 				}
-				changed = AnalizeSerializedObject(value, validation, doAction) || changed;
 			}
-			return changed;
 		}
 
 		public class ReflectionItem {

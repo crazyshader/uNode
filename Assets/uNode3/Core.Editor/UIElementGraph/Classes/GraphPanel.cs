@@ -36,14 +36,12 @@ namespace MaxyGames.UNode.Editors {
 
 		private uNodeEditor.TabData tabData => graphEditor.tabData;
 
-		VisualElement classContainer, variableContainer, propertyContainer, functionContainer, eventContainer, constructorContainer, namespaceElement, interfaceContainer, enumContainer, localContainer, nestedContainer;
-		ClickableElement namespaceButton, classAddButton, functionAddButton;
+		VisualElement classContainer, variableContainer, propertyContainer, graphContainer, functionContainer, eventContainer, constructorContainer, namespaceElement, localContainer, nestedContainer;
+		ClickableElement namespaceButton, classAddButton, functionAddButton, graphAddButton;
 		Dictionary<object, ClickableElement> contentMap = new Dictionary<object, ClickableElement>();
 
 		[SerializeField]
-		bool showClasses = true, showVariables = true, showProperties = true, showFunctions = true, showEvents = true, showConstructors = true, showInterfaces = true, showEnums = true, showLocal = true, showNested = true;
-
-		private TreeView treeView;
+		bool showClasses = true, showVariables = true, showProperties = true, showFunctions = true, showGraphs = true, showEvents = true, showConstructors = true, showLocal = true, showNested = true;
 
 		public GraphPanel(UIElementGraph graph) {
 			try {
@@ -99,7 +97,7 @@ namespace MaxyGames.UNode.Editors {
 					var mPos = (evt.currentTarget as VisualElement).GetScreenMousePosition(evt.GetLocalMousePosition(), graphEditor.window);
 					var manipulators = NodeEditorUtility.FindGraphManipulators();
 					foreach(var manipulator in manipulators) {
-						manipulator.tabData = tabData;
+						manipulator.graphEditor = graphEditor;
 						if(manipulator.IsValid(nameof(manipulator.CreateNewClass)) && manipulator.CreateNewClass(mPos, ReloadView)) {
 							break;
 						}
@@ -126,7 +124,7 @@ namespace MaxyGames.UNode.Editors {
 					var mPos = (evt.currentTarget as VisualElement).GetScreenMousePosition(evt.GetLocalMousePosition(), graphEditor.window);
 					var manipulators = NodeEditorUtility.FindGraphManipulators();
 					foreach(var manipulator in manipulators) {
-						manipulator.tabData = tabData;
+						manipulator.graphEditor = graphEditor;
 						if(manipulator.IsValid(nameof(manipulator.CreateNewVariable)) && manipulator.CreateNewVariable(mPos, ReloadView)) {
 							break;
 						}
@@ -152,7 +150,7 @@ namespace MaxyGames.UNode.Editors {
 					var mPos = (evt.currentTarget as VisualElement).GetScreenMousePosition(evt.GetLocalMousePosition(), graphEditor.window);
 					var manipulators = NodeEditorUtility.FindGraphManipulators();
 					foreach(var manipulator in manipulators) {
-						manipulator.tabData = tabData;
+						manipulator.graphEditor = graphEditor;
 						if(manipulator.IsValid(nameof(manipulator.CreateNewProperty)) && manipulator.CreateNewProperty(mPos, ReloadView)) {
 							break;
 						}
@@ -177,6 +175,33 @@ namespace MaxyGames.UNode.Editors {
 					ReloadView();
 				});
 			}
+			{//Graphs
+				VisualElement header = scroll.Q("graph");
+				graphContainer = header.Q("contents");
+				var icon = header.Q("title-icon") as Image;
+				icon.image = uNodeEditorUtility.GetTypeIcon(typeof(TypeIcons.StateIcon));
+				icon.parent.Add(new VisualElement() { name = "spacer" });
+				var plusElement = new ClickableElement("+") {
+					name = "title-button-add",
+				};
+				plusElement.onClick = (evt) => {
+					var mPos = (evt.currentTarget as VisualElement).GetScreenMousePosition(evt.GetLocalMousePosition(), graphEditor.window);
+					var manipulators = NodeEditorUtility.FindGraphManipulators();
+					foreach(var manipulator in manipulators) {
+						manipulator.graphEditor = graphEditor;
+						if(manipulator.IsValid(nameof(manipulator.CreateNewGraph)) && manipulator.CreateNewGraph(mPos, ReloadView)) {
+							break;
+						}
+					}
+				};
+				graphAddButton = plusElement;
+				icon.parent.Add(plusElement);
+				var toggle = header.Q("expanded") as Foldout;
+				toggle.RegisterValueChangedCallback(evt => {
+					showGraphs = evt.newValue;
+					ReloadView();
+				});
+			}
 			{//Function
 				VisualElement header = scroll.Q("function");
 				functionContainer = header.Q("contents");
@@ -190,7 +215,7 @@ namespace MaxyGames.UNode.Editors {
 					var mPos = (evt.currentTarget as VisualElement).GetScreenMousePosition(evt.GetLocalMousePosition(), graphEditor.window);
 					var manipulators = NodeEditorUtility.FindGraphManipulators();
 					foreach(var manipulator in manipulators) {
-						manipulator.tabData = tabData;
+						manipulator.graphEditor = graphEditor;
 						if(manipulator.IsValid(nameof(manipulator.CreateNewFunction)) && manipulator.CreateNewFunction(mPos, ReloadView)) {
 							break;
 						}
@@ -239,7 +264,7 @@ namespace MaxyGames.UNode.Editors {
 						var mPos = (evt.currentTarget as VisualElement).GetScreenMousePosition(evt.GetLocalMousePosition(), graphEditor.window);
 						var manipulators = NodeEditorUtility.FindGraphManipulators();
 						foreach(var manipulator in manipulators) {
-							manipulator.tabData = tabData;
+							manipulator.graphEditor = graphEditor;
 							if(manipulator.IsValid(nameof(manipulator.CreateNewLocalVariable)) && manipulator.CreateNewLocalVariable(mPos, ReloadView)) {
 								break;
 							}
@@ -271,48 +296,6 @@ namespace MaxyGames.UNode.Editors {
 				var toggle = header.Q("expanded") as Foldout;
 				toggle.RegisterValueChangedCallback(evt => {
 					showNested = evt.newValue;
-					ReloadView();
-				});
-			}
-			{//Interfaces
-				VisualElement header = scroll.Q("interface");
-				header.SetDisplay(false);
-				interfaceContainer = header.Q("contents");
-				var icon = header.Q("title-icon") as Image;
-				icon.image = uNodeEditorUtility.GetTypeIcon(typeof(TypeIcons.InterfaceIcon));
-				icon.parent.Add(new VisualElement() { name = "spacer" });
-				var plusElement = new ClickableElement("+") {
-					name = "title-button-add",
-				};
-				plusElement.onClick = (_) => {
-
-					ReloadView();
-				};
-				icon.parent.Add(plusElement);
-				var toggle = header.Q("expanded") as Foldout;
-				toggle.RegisterValueChangedCallback(evt => {
-					showInterfaces = evt.newValue;
-					ReloadView();
-				});
-			}
-			{//Enums
-				VisualElement header = scroll.Q("enum");
-				header.SetDisplay(false);
-				enumContainer = header.Q("contents");
-				var icon = header.Q("title-icon") as Image;
-				icon.image = uNodeEditorUtility.GetTypeIcon(typeof(TypeIcons.EnumIcon));
-				icon.parent.Add(new VisualElement() { name = "spacer" });
-				var plusElement = new ClickableElement("+") {
-					name = "title-button-add",
-				};
-				plusElement.onClick = (_) => {
-
-					ReloadView();
-				};
-				icon.parent.Add(plusElement);
-				var toggle = header.Q("expanded") as Foldout;
-				toggle.RegisterValueChangedCallback(evt => {
-					showEnums = evt.newValue;
 					ReloadView();
 				});
 			}
@@ -457,7 +440,7 @@ namespace MaxyGames.UNode.Editors {
 
 					var manipulators = NodeEditorUtility.FindGraphManipulators();
 					foreach(var manipulator in manipulators) {
-						manipulator.tabData = tabData;
+						manipulator.graphEditor = graphEditor;
 						if(manipulator.IsValid(nameof(manipulator.ContextMenuForVariable))) {
 							var menuItems = manipulator.ContextMenuForVariable(mPos, variable);
 							if(menuItems != null) {
@@ -554,7 +537,7 @@ namespace MaxyGames.UNode.Editors {
 					});
 					var manipulators = NodeEditorUtility.FindGraphManipulators();
 					foreach(var manipulator in manipulators) {
-						manipulator.tabData = tabData;
+						manipulator.graphEditor = graphEditor;
 						if(manipulator.IsValid(nameof(manipulator.ContextMenuForProperty))) {
 							var menuItems = manipulator.ContextMenuForProperty(mPos, property);
 							if(menuItems != null) {
@@ -728,7 +711,7 @@ namespace MaxyGames.UNode.Editors {
 					});
 					var manipulators = NodeEditorUtility.FindGraphManipulators();
 					foreach(var manipulator in manipulators) {
-						manipulator.tabData = tabData;
+						manipulator.graphEditor = graphEditor;
 						if(manipulator.IsValid(nameof(manipulator.ContextMenuForFunction))) {
 							var menuItems = manipulator.ContextMenuForFunction(mPos, function);
 							if(menuItems != null) {
@@ -853,7 +836,7 @@ namespace MaxyGames.UNode.Editors {
 			else if(graphElement is MainGraphContainer mainContainer) {
 				if(desiredGraph is IMacroGraph || desiredGraph is IStateGraph state && state.CanCreateStateGraph || desiredGraph is ICustomMainGraph) {
 					content.label.text = $"[{graphData.mainGraphTitle}]";
-					Texture icon = uNodeEditorUtility.GetTypeIcon(typeof(TypeIcons.StateIcon));
+					Texture icon = uNodeEditorUtility.GetTypeIcon(typeof(TypeIcons.EventIcon));
 					content.ShowIcon(icon);
 					content.onClick = (_) => {
 						graphData.ClearSelection();
@@ -900,6 +883,110 @@ namespace MaxyGames.UNode.Editors {
 					ReloadView();
 				};
 			}
+			else if(graphElement is NodeContainer container) {
+				Texture icon = uNodeEditorUtility.GetTypeIcon(container);
+				content.ShowIcon(icon);
+				content.onClick = (_) => {
+					graphEditor.window.ChangeEditorSelection(container);
+					if(graphData.selectedRoot != container || graphData.selectedGroup != null) {
+						graphData.currentCanvas = container;
+						graphEditor.SelectionChanged();
+						graphEditor.UpdatePosition();
+						graphEditor.Refresh();
+					}
+				};
+				content.GetDragGenericData = () => {
+					var result = new Dictionary<string, object>();
+					result["uNode"] = container;
+					result["uNode-Target"] = graphData.graph;
+					return result;
+				};
+				var current = container;
+				data.clickEvent = evt => {
+					var mPos = (evt.currentTarget as VisualElement).GetScreenMousePosition(evt.localMousePosition, graphEditor.window);
+					if(evt.button == 0 && (evt.clickCount == 2 || evt.altKey)) {
+						//Rename
+						GraphUtility.RefactorElementName(mPos, current, () => {
+							graphData.Refresh();
+							ReloadView();
+						});
+					}
+					else if(evt.button == 0 && evt.shiftKey) {
+						CustomInspector.Inspect(mPos, new GraphEditorData(graphData, current));
+					}
+				};
+				data.contextMenuEvent = evt => {
+					var mPos = UIElementUtility.GetScreenMousePosition(evt.currentTarget as VisualElement, evt.localMousePosition, graphEditor.window);
+					evt.menu.AppendAction("Rename", (act) => {
+						GraphUtility.RefactorElementName(mPos, current, () => {
+							graphData.Refresh();
+							ReloadView();
+						});
+					});
+					evt.menu.AppendAction("Inspect...", (act) => {
+						CustomInspector.Inspect(mPos, new GraphEditorData(graphData, current));
+					});
+					evt.menu.AppendAction("Create Group", act => {
+						if(graphData.owner)
+							uNodeEditorUtility.RegisterUndo(graphData.owner, "Group Function: " + current.name);
+						var group = current.parent.AddChild(new UGroupElement() { name = "New Group" });
+						group.PlaceBehind(current);
+						current.SetParent(group);
+						ReloadView();
+					});
+					evt.menu.AppendSeparator("");
+					//TODO: add support to find reference
+					//evt.menu.AppendAction("Find All References", act => {
+					//	GraphUtility.ShowFunctionUsages(current);
+					//});
+					var manipulators = NodeEditorUtility.FindGraphManipulators();
+					foreach(var manipulator in manipulators) {
+						manipulator.graphEditor = graphEditor;
+						if(manipulator.IsValid(nameof(manipulator.ContextMenuForGraph))) {
+							var menuItems = manipulator.ContextMenuForEventGraph(mPos, current);
+							if(menuItems != null) {
+								foreach(var menu in menuItems) {
+									if(menu == null) continue;
+									evt.menu.MenuItems().Add(menu);
+								}
+							}
+						}
+					}
+					evt.menu.AppendSeparator("");
+					evt.menu.AppendAction("Move Up", (act) => {
+						if(graphData.owner)
+							uNodeEditorUtility.RegisterUndo(graphData.owner, "Move Up: " + current.name);
+						GraphUtility.ReorderMoveUp<EventGraphContainer>(current);
+						ReloadView();
+					});
+					evt.menu.AppendAction("Move Down", (act) => {
+						if(graphData.owner)
+							uNodeEditorUtility.RegisterUndo(graphData.owner, "Move Down: " + current.name);
+						GraphUtility.ReorderMoveDown<EventGraphContainer>(current);
+						ReloadView();
+					});
+					evt.menu.AppendSeparator("");
+					evt.menu.AppendAction("Duplicate", act => {
+						if(graphData.owner != null)
+							uNodeEditorUtility.RegisterUndo(graphData.owner, "Duplicate: " + current.name);
+						GraphUtility.CopyPaste.Duplicate(current);
+						ReloadView();
+					});
+					evt.menu.AppendAction("Remove", (act) => {
+						if(graphData.owner)
+							uNodeEditorUtility.RegisterUndo(graphData.owner, "Remove: " + current.name);
+						current.Destroy();
+						ReloadView();
+					});
+				};
+				content.removeAction = () => {
+					if(graphData.owner)
+						uNodeEditorUtility.RegisterUndo(graphData.owner, "Remove: " + current.name);
+					current.Destroy();
+					ReloadView();
+					graphEditor.Refresh();
+				};
+			}
 			else {
 				Texture icon = uNodeEditorUtility.GetTypeIcon(typeof(TypeIcons.FolderIcon));
 				content.ShowIcon(icon);
@@ -916,7 +1003,7 @@ namespace MaxyGames.UNode.Editors {
 		}
 
 		void DrawElements(UGraphElement container, VisualElement viewContainer) {
-			TreeView treeView = viewContainer.Q<TreeView>();
+			var treeView = viewContainer.Q<TreeView>();
 			if(treeView == null) {
 				treeView = new TreeView(
 					makeItem: () => {
@@ -977,6 +1064,9 @@ namespace MaxyGames.UNode.Editors {
 				else if(element is PropertyContainer) {
 					return true;
 				}
+				else if(element is EventGraphContainer) {
+					return true;
+				}
 				else if(element is FunctionContainer) {
 					return true;
 				}
@@ -1019,7 +1109,7 @@ namespace MaxyGames.UNode.Editors {
 				}
 			}
 			var items = GetElements(container);
-			if(items.Count > 0) {
+			if(items?.Count > 0) {
 				treeView.ShowElement();
 				treeView.SetRootItems(items);
 				treeView.Rebuild();
@@ -1181,7 +1271,7 @@ namespace MaxyGames.UNode.Editors {
 									//}
 									var manipulators = NodeEditorUtility.FindGraphManipulators();
 									foreach(var manipulator in manipulators) {
-										manipulator.tabData = tabData;
+										manipulator.graphEditor = graphEditor;
 										if(manipulator.IsValid(nameof(manipulator.ContextMenuForGraph))) {
 											var menuItems = manipulator.ContextMenuForGraph(mPos);
 											if(menuItems != null) {
@@ -1331,6 +1421,30 @@ namespace MaxyGames.UNode.Editors {
 			}
 			else {
 				propertyContainer.parent.SetDisplay(false);
+			}
+
+			//Graphs
+			if(graphData.graph != null && (graphData.graph is IStateGraph state && state.CanCreateStateGraph || graphData.graph is IMacroGraph || graphData.graph is ICustomMainGraph || graphData.graph is IGraphWithEventGraph evtGraph && evtGraph.SupportedEventGraphs?.Count > 0)) {
+				if(showGraphs) {
+					graphContainer.parent.SetDisplay(true);
+					if(graphData.graph is IGraphWithEventGraph eventGraph && eventGraph.SupportedEventGraphs?.Count > 0) {
+						graphAddButton.SetDisplay(true);
+					}
+					else {
+						graphAddButton.SetDisplay(false);
+					}
+					var container = graphData.graphData.eventGraphContainer;
+					DrawElements(container, graphContainer);
+				}
+				else {
+					for(int i = 0; i < graphContainer.childCount; i++) {
+						graphContainer[i].RemoveFromHierarchy();
+						i--;
+					}
+				}
+			}
+			else {
+				graphContainer.parent.SetDisplay(false);
 			}
 
 			//Functions
@@ -1549,7 +1663,7 @@ namespace MaxyGames.UNode.Editors {
 				constructorContainer.parent.SetDisplay(false);
 			}
 			//Local Variable
-			if(graphData.graph != null && graphData.selectedRoot != null && !(graphData.selectedRoot is MainGraphContainer)) {
+			if(graphData.graph != null && graphData.selectedRoot is ILocalVariableSystem) {
 				localContainer.parent.SetDisplay(true);
 				if(showLocal) {
 					var container = graphData.selectedRoot.variableContainer;

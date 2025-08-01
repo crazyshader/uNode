@@ -37,8 +37,11 @@ namespace MaxyGames.UNode.Editors {
 			_owner = editorData._owner;
 			_graph = editorData._graph;
 			_serializedSelecteds = new List<BaseReference>(editorData.serializedSelecteds);
-			foreach(var ele in selections) {
-				serializedSelecteds.Add(new UGraphElementRef(ele));
+			if(selections.Length > 0) {
+				_serializedSelecteds.Clear();
+				foreach(var ele in selections) {
+					serializedSelecteds.Add(new UGraphElementRef(ele));
+				}
 			}
 			currentCanvas = editorData.currentCanvas;
 		}
@@ -156,8 +159,8 @@ namespace MaxyGames.UNode.Editors {
 			}
 			m_scopes.Clear();
 			if(canvas is NodeObject) {
-				if(canvas is ISuperNode) {
-					NodeScope.ApplyScopes((canvas as ISuperNode).SupportedScope, m_scopes, null, out _);
+				if((canvas as NodeObject).node is ISuperNode superNode) {
+					NodeScope.ApplyScopes(superNode.SupportedScope, m_scopes, null, out _);
 				}
 				else {
 					m_scopes.Add(NodeScope.FlowGraph);
@@ -179,6 +182,10 @@ namespace MaxyGames.UNode.Editors {
 							}
 						}
 					}
+					else if(root is IEventGraphCanvas) {
+						var canvass = root as IEventGraphCanvas;
+						NodeScope.ApplyScopes(canvass.Scope, m_scopes, null, out _);
+					}
 					if(root is BaseFunction) {
 						m_scopes.Add(NodeScope.Function);
 						m_scopes.Add(NodeScope.FlowGraph);
@@ -192,6 +199,8 @@ namespace MaxyGames.UNode.Editors {
 					m_scopes.Add(NodeScope.FlowGraph);
 				}
 			}
+			//For in case entry was deleted.
+			if(canvas is NodeContainerWithEntry containerWithEntry && containerWithEntry.Entry != null) { }
 		}
 
 		[System.NonSerialized]
@@ -340,7 +349,7 @@ namespace MaxyGames.UNode.Editors {
 		public string mainGraphTitle {
 			get {
 				if(graph is IStateGraph) {
-					return "STATE GRAPH";
+					return "EVENT GRAPH";
 				}
 				else if(graph is IMacroGraph) {
 					return "MACRO";
@@ -392,11 +401,24 @@ namespace MaxyGames.UNode.Editors {
 		}
 
 		/// <summary>
+		/// Add element to selection
+		/// </summary>
+		/// <param name="element"></param>
+		public void AddToSelection(IEnumerable<UGraphElement> elements) {
+			if(elements != null) {
+				foreach(var e in elements) {
+					if(e == null) continue;
+					AddToSelection(e);
+				}
+			}
+		}
+
+		/// <summary>
 		/// Remove element from selection
 		/// </summary>
 		/// <param name="element"></param>
 		public void RemoveFromSelection(UGraphElement element) {
-			for(int i=0;i< serializedSelecteds.Count;i++) {
+			for(int i = 0; i < serializedSelecteds.Count; i++) {
 				if(serializedSelecteds[i].ReferenceValue as UGraphElement == element) {
 					serializedSelecteds.RemoveAt(i);
 				}
@@ -483,17 +505,18 @@ namespace MaxyGames.UNode.Editors {
 		public GraphCanvas GetCurrentCanvasData() {
 			return GetGraphPosition(currentCanvas, false);
 		}
-		
+
 		private GraphCanvas GetGraphPosition(UGraphElement obj, bool focusCanvas = true) {
 			if(obj == null) {
 				obj = graphData?.mainGraphContainer;
 			}
 			GraphCanvas graphCanvas = canvasDatas.FirstOrDefault(p => p.graphElement == obj);
 			if(graphCanvas != null) {
-				if (graphCanvas.position != Vector2.zero) {
+				if(graphCanvas.position != Vector2.zero) {
 					return graphCanvas;
 				}
-			} else {
+			}
+			else {
 				graphCanvas = new GraphCanvas(obj);
 				canvasDatas.Add(graphCanvas);
 			}
@@ -504,16 +527,18 @@ namespace MaxyGames.UNode.Editors {
 				if(obj is NodeContainerWithEntry containerWithEntry && containerWithEntry.Entry != null) {
 					graphCanvas.position = new Vector2(containerWithEntry.Entry.position.x - 200, containerWithEntry.Entry.position.y - 200);
 				}
-			} else if(obj is NodeObject nodeObject) {
+			}
+			else if(obj is NodeObject nodeObject) {
 				if(nodeObject.node is ISuperNode) {
 					ISuperNode superNode = nodeObject.node as ISuperNode;
-					foreach(var n in superNode.nestedFlowNodes) {
+					foreach(var n in superNode.NestedFlowNodes) {
 						if(n != null) {
 							graphCanvas.position = new Vector2(n.position.x - 200, n.position.y - 200);
 							break;
 						}
 					}
-				} else {
+				}
+				else {
 					graphCanvas.position = new Vector2(nodeObject.position.x - 200, nodeObject.position.y - 200);
 				}
 			}
@@ -521,7 +546,7 @@ namespace MaxyGames.UNode.Editors {
 				if(obj is NodeObject) {
 					var nodes = obj.GetObjectsInChildren<NodeObject>();
 					var n = nodes.FirstOrDefault();
-					if (n != null) {
+					if(n != null) {
 						graphCanvas.position = new Vector2(n.position.x - 200, n.position.y - 200);
 					}
 				}

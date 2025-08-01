@@ -26,14 +26,28 @@ namespace MaxyGames.UNode.Editors {
 		public virtual UNodeView InitializeView(UGraphView graph, NodeObject node) => null;
 
 		public virtual EdgeView InitializeEdge(UGraphView graph, EdgeData edgeData) => null;
+
+		public virtual IEnumerable<DropdownMenuItem> ContextMenuForNode(Vector2 mousePosition, UNodeView view) => null;
+
+		/// <summary>
+		/// Handle the default port on drop event
+		/// </summary>
+		/// <param name="graphView"></param>
+		/// <param name="edge"></param>
+		/// <returns></returns>
+		public virtual bool HandlePortOnDrop(UGraphView graphView, EdgeView edge) => false;
+
+		/// <summary>
+		/// Handle the default port on drop event
+		/// </summary>
+		/// <param name="edge"></param>
+		/// <param name="position"></param>
+		/// <returns></returns>
+		public virtual bool HandlePortOnDropOutsidePort(UGraphView graphView, EdgeView edge, Vector2 position) => false;
 	}
 
 	class DefaultUIGraphProcessor : UIGraphProcessor {
 		public override int order => int.MaxValue;
-
-		public override UNodeView InitializeView(UGraphView graph, NodeObject node) {
-			return null;
-		}
 
 		public override bool RepaintNode(UGraphView graph, UNodeView view, NodeObject node, bool fullReload) {
 			if(node.node is Nodes.NodeValueConverter) {
@@ -50,20 +64,28 @@ namespace MaxyGames.UNode.Editors {
 		}
 
 		public override EdgeView InitializeEdge(UGraphView graph, EdgeData edgeData) {
-			var tNode = edgeData.output.GetNode() as Nodes.NodeValueConverter;
-			if(tNode != null) {
-				tNode.type = edgeData.input.GetPortType();
-				var nView = graph.GetNodeView(tNode);
-				if(nView != null) {
-					tNode.position = edgeData.input.owner.GetPosition();
-					tNode.nodeObject.position.x -= 50;
-					nView.HideElement();
-					nView.SetDisplay(false);
+			var outNode = edgeData.output.GetNode();
+			if(outNode != null) {
+				if(outNode is Nodes.NodeValueConverter valueConverter) {
+					var type = edgeData.input.GetPortType();
+					if(type != typeof(object)) {
+						valueConverter.type = type;
+					}
+					var nView = graph.GetNodeView(valueConverter);
+					if(nView != null) {
+						valueConverter.position = edgeData.input.owner.GetPosition();
+						valueConverter.nodeObject.position.x -= 50;
+						nView.HideElement();
+						nView.SetDisplay(false);
+					}
+					return new ConversionEdgeView(valueConverter, new EdgeData(null, edgeData.input, PortUtility.GetPort(valueConverter.input.connections[0].output, graph)));
 				}
-				return new ConversionEdgeView(tNode, new EdgeData(null, edgeData.input, PortUtility.GetPort(tNode.input.connections[0].output, graph)));
 			}
 			if(edgeData.input.GetNode() is Nodes.NodeValueConverter vc && vc.output.isConnected) {
 				return null;
+			}
+			if(graph.graphData.scopes.Contains(StateGraphContainer.Scope)) {
+				return new TransitionEdgeView(edgeData);
 			}
 			return new EdgeView(edgeData);
 		}
@@ -166,6 +188,30 @@ namespace MaxyGames.UNode.Editors {
 					}
 				}
 				action?.Invoke();
+			}
+			return false;
+		}
+
+		public override IEnumerable<DropdownMenuItem> ContextMenuForNode(Vector2 mousePosition, UNodeView view) {
+			if(view.targetNode is Nodes.StateEntryNode || view.targetNode is Nodes.StateTransition) {
+				yield return new DropdownMenuAction("Make Connection", (e) => {
+					view.outputPorts.First().SendMakeConnectionEvent();
+				}, DropdownMenuAction.AlwaysEnabled);
+			}
+			yield break;
+		}
+
+		public override bool HandlePortOnDropOutsidePort(UGraphView graphView, EdgeView edge, Vector2 position) {
+			if(graphView.graphData.scopes.Contains(StateGraphContainer.Scope)) {
+				if(edge.isFlow) {
+					if(edge.Output != null) {
+						NodeEditorUtility.AddNewNode<Nodes.ScriptState>(graphView.graphData, position, node => {
+							node.enter.ConnectTo(edge.Output.GetPortValue());
+							graphView.graphEditor.Refresh();
+						});
+					}
+				}
+				return true;
 			}
 			return false;
 		}

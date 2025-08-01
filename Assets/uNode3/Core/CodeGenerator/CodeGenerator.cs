@@ -523,12 +523,21 @@ namespace MaxyGames {
 
 			#region Generate Nodes
 			generationState.isStatic = false;
+			if(generatorData.setupActions.Count > 0) {//Setup before generations
+				generatorData.setupActions.Sort((x, y) => CompareUtility.Compare(x.Item2, y.Item2));
+				ThreadingUtil.Queue(() => {
+					foreach(var (action, _) in generatorData.setupActions) {
+						action?.Invoke();
+					}
+				});
+			}
 			for(int i = 0; i < generatorData.allNode.Count; i++) {
 				var node = generatorData.allNode[i];
 				if(node == null)
 					continue;
 				ThreadingUtil.Queue(() => {
 					if(node != null) {
+						generationState.context = node;
 						if(generatorData.initActionForNodes.TryGetValue(node, out var action)) {
 							action();
 						}
@@ -571,6 +580,7 @@ namespace MaxyGames {
 				ThreadingUtil.Queue(() => {
 					try {
 						generationState.isStatic = function.modifier.Static;
+						generationState.context = f;
 						List<AData> attribute = new List<AData>();
 						if(function.attributes != null && function.attributes.Count > 0) {
 							foreach(var a in function.attributes) {
@@ -814,6 +824,7 @@ namespace MaxyGames {
 				if(prop == null || !prop.obj)
 					continue;
 				ThreadingUtil.Queue(() => {
+					generationState.context = prop;
 					generationState.isStatic = prop.modifier != null && prop.modifier.Static;
 					string str = prop.GenerateCode().AddFirst("\n", result != null);
 					if(includeGraphInformation && prop.obj != null) {
@@ -841,6 +852,7 @@ namespace MaxyGames {
 				var ctor = generatorData.constructors[i];
 				if(ctor == null || !ctor.obj)
 					continue;
+				generationState.context = ctor;
 				ThreadingUtil.Queue(() => {
 					string str = ctor.GenerateCode().AddFirst("\n\n", result != null);
 					if(includeGraphInformation && ctor.obj != null) {
@@ -2158,6 +2170,18 @@ namespace MaxyGames {
 					else if(member.targetType == MemberData.TargetType.uNodeVariable) {
 						var variable = member.startItem.GetReferenceValue() as Variable;
 						if(variable != null) {
+							if(generationState.container is BaseFunction function) {
+								var result = GetVariableName(variable);
+								if(function.parameters.Any(p => p.name == result)) {
+									if(generationState.isStatic) {
+										return generatorData.typeName.CGAccess(result);
+									}
+									else {
+										return This.CGAccess(result);
+									}
+								}
+								return result;
+							}
 							return GetVariableName(variable);
 						}
 						else {
@@ -2894,7 +2918,7 @@ namespace MaxyGames {
 					initializers.Add(initializer);
 				}
 				if(includeField) {
-					FieldInfo[] fields = ReflectionUtils.GetFields(value);
+					FieldInfo[] fields = value.GetType().GetFields();
 					foreach(FieldInfo field in fields) {
 						if(field.IsInitOnly)
 							continue;//Skip if the field is `read-only`
@@ -2908,7 +2932,7 @@ namespace MaxyGames {
 					}
 				}
 				if(includeProperty) {
-					PropertyInfo[] properties = ReflectionUtils.GetProperties(value);
+					PropertyInfo[] properties = value.GetType().GetProperties();
 					foreach(PropertyInfo property in properties) {
 						if(property.CanRead && property.CanWrite && !property.IsDefinedAttribute(typeof(ObsoleteAttribute))) {
 							object fieldObj = property.GetValueOptimized(value);
@@ -2985,6 +3009,9 @@ namespace MaxyGames {
 		/// <param name="variable"></param>
 		/// <returns></returns>
 		public static VData GetVariableData(object reference) {
+			if(reference is Node) {
+				reference = (reference as Node).nodeObject;
+			}
 			foreach(VData vdata in generatorData.GetVariables()) {
 				if(object.ReferenceEquals(vdata.reference, reference)) {
 					return vdata;
@@ -3100,6 +3127,9 @@ namespace MaxyGames {
 		/// <param name="value"></param>
 		/// <returns></returns>
 		public static string RegisterPrivateVariable(string name, Type type, object value = null, object reference = null) {
+			if(reference is Node) {
+				reference = (reference as Node).nodeObject;
+			}
 			if(reference != null) {
 				foreach(VData vdata in generatorData.GetVariables()) {
 					if(reference == vdata.reference) {
@@ -3161,6 +3191,15 @@ namespace MaxyGames {
 		}
 
 		/// <summary>
+		/// Register pre generation process, this is normally called after initialization but before node generation.
+		/// </summary>
+		/// <param name="action"></param>
+		/// <param name="order"></param>
+		public static void RegisterSetup(Action action, int order = 0) {
+			generatorData.setupActions.Add((action, order));
+		}
+
+		/// <summary>
 		/// Register pre node generation process, this is normally called after initialization but before node generation.
 		/// Note: call only from RegisterPort.
 		/// </summary>
@@ -3177,16 +3216,8 @@ namespace MaxyGames {
 		/// Register post initialization action.
 		/// </summary>
 		/// <param name="action"></param>
-		public static void RegisterPostInitialization(Action action) {
-			generatorData.postInitialization.Add((action, 0));
-		}
-
-		/// <summary>
-		/// Register post initialization action.
-		/// </summary>
-		/// <param name="action"></param>
 		/// <param name="order"></param>
-		public static void RegisterPostInitialization(Action action, int order) {
+		public static void RegisterPostInitialization(Action action, int order = 0) {
 			generatorData.postInitialization.Add((action, order));
 		}
 
@@ -3322,6 +3353,23 @@ namespace MaxyGames {
 		#endregion
 
 		#region InsertMethod
+		/// <summary>
+		/// Insert code to function with name <paramref name="functionName"/> that return void and has no parameters
+		/// </summary>
+		/// <param name="functionName"></param>
+		/// <param name="code"></param>
+		/// <param name="priority"></param>
+		public static void InsertCodeToFunction(string functionName, string code, int priority = 0) {
+			InsertCodeToFunction(functionName, typeof(void), code, priority);
+		}
+
+		/// <summary>
+		/// Insert code to function with name <paramref name="functionName"/> that return <paramref name="returnType"/> and has no parameters
+		/// </summary>
+		/// <param name="functionName"></param>
+		/// <param name="returnType"></param>
+		/// <param name="code"></param>
+		/// <param name="priority"></param>
 		public static void InsertCodeToFunction(string functionName, Type returnType, string code, int priority = 0) {
 			var mData = generatorData.GetMethodData(functionName);
 			if(mData == null) {
@@ -3330,6 +3378,25 @@ namespace MaxyGames {
 			mData.AddCode(code, priority);
 		}
 
+		/// <summary>
+		/// Insert code to function with name <paramref name="functionName"/> that return void and has parameters equal to <paramref name="parameterTypes"/>
+		/// </summary>
+		/// <param name="functionName"></param>
+		/// <param name="parameterTypes"></param>
+		/// <param name="code"></param>
+		/// <param name="priority"></param>
+		public static void InsertCodeToFunction(string functionName, Type[] parameterTypes, string code, int priority = 0) {
+			InsertCodeToFunction(functionName, typeof(void), code, priority);
+		}
+
+		/// <summary>
+		/// Insert code to function with name <paramref name="functionName"/>
+		/// </summary>
+		/// <param name="functionName"></param>
+		/// <param name="returnType"></param>
+		/// <param name="parameterTypes"></param>
+		/// <param name="code"></param>
+		/// <param name="priority"></param>
 		public static void InsertCodeToFunction(string functionName, Type returnType, Type[] parameterTypes, string code, int priority = 0) {
 			var mData = generatorData.GetMethodData(functionName, parameterTypes.Select((item) => item).ToArray());
 			if(mData == null) {

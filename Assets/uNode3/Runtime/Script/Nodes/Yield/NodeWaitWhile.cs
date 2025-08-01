@@ -3,12 +3,12 @@ using System.Collections;
 using System.Collections.Generic;
 
 namespace MaxyGames.UNode.Nodes {
-	[NodeMenu("Yield", "WaitWhile", IsCoroutine = true)]
+	[NodeMenu("Yield", "WaitWhile", IsCoroutine = true, hasFlowOutput = true, hasFlowInput = true)]
 	[Description("Waits until condition evaluate to false.")]
 	public class NodeWaitWhile : CoroutineNode, IStackedNode {
 		public BlockData data = new BlockData();
 
-		public IEnumerable<NodeObject> stackedNodes => data.GetNodes();
+		public IEnumerable<NodeObject> StackedNodes => data.GetNodes();
 
 		protected override void OnRegister() {
 			base.OnRegister();

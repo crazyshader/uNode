@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.2.0
+- Added new State Machine graph and support for Class Component & C# Graph that inherit from MonoBehaviour
+- Added new Call Stack window, auto open when breakpoint is hit in playmode allowing for see the execution flows and has ability to highlight node, ping object, and open script.
+- Added ability to make connection by single click on the port ( no need to hold down left button )
+- Added ability to re-order StringBuilder input ports
+- Added option to use System.Text.StringBuilder instead of concatenation string on StringBuilder node
+- Added generator preference to remove `this` unnecessary code
+- Added generator preference to prefer use reduce static extension method ex: System.Linq.First(myVal) => myVal.First()
+- Renamed State Graph to Event Graph
+- Improved C# Parser
+- Improved Code Generation
+- Improved Editor
+- Fixed most of reported bugs
+
 ## v3.1.5
 - Added more drag & drop menu items
 - Improved Code Generation

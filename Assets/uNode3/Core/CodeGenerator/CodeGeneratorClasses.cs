@@ -74,6 +74,8 @@ namespace MaxyGames {
 			public bool isStatic;
 			public ContextState contextState = ContextState.None;
 
+			public string typeName => generatorData.typeName;
+
 			public State m_state = State.Classes;
 			public State state {
 				get => m_state;
@@ -81,6 +83,32 @@ namespace MaxyGames {
 					m_state = value;
 					//Reset other value every time state is changed.
 					contextState = ContextState.None;
+					context = null;
+				}
+			}
+			private object m_context;
+			public object context {
+				get => m_context;
+				set {
+					if(value is Node n) {
+						value = n.nodeObject;
+					}
+					m_context = value;
+					m_container = null;
+				}
+			}
+			private NodeContainer m_container;
+			public NodeContainer container {
+				get {
+					if(m_container == null) {
+						if(m_context is UGraphElement element) {
+							m_container = element.GetObjectInParent<NodeContainer>();
+						}
+						else if(m_context is UPort port) {
+							m_container = port.node.GetObjectInParent<NodeContainer>();
+						}
+					}
+					return m_container;
 				}
 			}
 
@@ -227,6 +255,7 @@ namespace MaxyGames {
 			public Action<ClassData> postGeneration;
 			public Action<GData> postManipulator;
 			public List<(Action, int)> postInitialization = new();
+			public List<(Action, int)> setupActions = new();
 			public Dictionary<NodeObject, Action> initActionForNodes = new Dictionary<NodeObject, Action>();
 			public Dictionary<object, HashSet<int>> initializedUserObject = new Dictionary<object, HashSet<int>>();
 
@@ -421,6 +450,12 @@ namespace MaxyGames {
 				return null;
 			}
 
+			/// <summary>
+			/// Insert code to the method, if no method found then it will create a new method with return void and no parameter.
+			/// </summary>
+			/// <param name="methodName"></param>
+			/// <param name="code"></param>
+			/// <param name="priority"></param>
 			public void InsertMethodCode(string methodName, string code, int priority = 0) {
 				foreach(MData m in methodData) {
 					if(m.name == methodName) {
@@ -428,7 +463,9 @@ namespace MaxyGames {
 						return;
 					}
 				}
-				throw new System.Exception("No Method data found to insert code");
+				var mData = new MData(methodName, typeof(void));
+				mData.AddCode(code, priority);
+				methodData.Add(mData);
 			}
 
 			public MData AddMethod(string methodName, Type returnType, params Type[] parametersType) {
@@ -1404,8 +1441,6 @@ namespace MaxyGames {
 			public string summary;
 			public Property obj;
 			public PropertyModifier modifier = new() {  Public = false };
-			public ICollection<AData> attributes;
-
 			public FunctionModifier getterModifier = new(), setterModifier = new();
 
 			string m_getContents;
@@ -1477,6 +1512,19 @@ namespace MaxyGames {
 				}
 			}
 
+			ICollection<AData> m_attributes;
+			public ICollection<AData> attributes {
+				get {
+					if(m_attributes == null && obj != null) {
+						m_attributes = obj.attributes.Select(v => TryParseAttributeData(v)).ToArray();
+					}
+					return m_attributes;
+				}
+				set {
+					m_attributes = value;
+				}
+			}
+
 			ICollection<AData> m_fieldAttributes;
 			public ICollection<AData> fieldAttributes {
 				get {
@@ -1534,12 +1582,13 @@ namespace MaxyGames {
 			public PData(Property property) {
 				obj = property;
 				summary = property.comment;
-			}
-
-			public PData(Property property, IList<AData> attributes) {
-				obj = property;
-				summary = property.comment;
-				this.attributes = attributes;
+				modifier = property.modifier;
+				getterModifier = property.getterModifier;
+				setterModifier = property.setterModifier;
+				attributes = property.attributes?.Select(a => TryParseAttributeData(a)).ToArray();
+				//fieldAttributes = property.fieldAttributes?.Select(p => TryParseAttributeData(p)).ToArray();
+				//getterAttributes = property.getterAttributes?.Select(a => TryParseAttributeData(a)).ToArray();
+				//setterAttributes = property.setterAttributes?.Select(a => TryParseAttributeData(a)).ToArray();
 			}
 
 			public string GenerateCode() {

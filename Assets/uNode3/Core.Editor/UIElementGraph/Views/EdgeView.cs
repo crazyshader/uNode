@@ -55,7 +55,7 @@ namespace MaxyGames.UNode.Editors {
 						if(e.button == 0 && e.clickCount == 2) {
 							var owner = data.input?.owner?.owner ?? data.output?.owner?.owner;
 							if(owner != null) {
-								var graph = owner.graph;
+								var graph = owner.graphEditor;
 								var mPos = this.ChangeCoordinatesTo(owner.contentViewContainer, e.localMousePosition);
 								Undo.SetCurrentGroupName("Create Reroute");
 								NodeEditorUtility.AddNewNode<Nodes.NodeReroute>(graph.graphData, null, null, new Vector2(mPos.x, mPos.y), (node) => {
@@ -123,6 +123,7 @@ namespace MaxyGames.UNode.Editors {
 					iMGUIContainer.style.flexGrow = 1;
 					iMGUIContainer.style.flexShrink = 0;
 					iMGUIContainer.pickingMode = PickingMode.Ignore;
+					iMGUIContainer.cullingEnabled = true;
 					edgeControl.Add(iMGUIContainer);
 				}
 			}
@@ -166,10 +167,9 @@ namespace MaxyGames.UNode.Editors {
 			if(Application.isPlaying && GraphDebug.useDebug) {
 				PortView port = input as PortView ?? output as PortView;
 				if(port != null && edgeControl.controlPoints != null && edgeControl.controlPoints.Length == 4) {
-					GraphDebug.DebugData debugData = port.owner.owner.graph.GetDebugInfo();
+					GraphDebug.DebugData debugData = port.owner.owner.graphEditor.GetDebugInfo();
 					if(debugData != null) {
-						//This to make sure to the UI is always repaint.
-						iMGUIContainer.MarkDirtyRepaint();
+						bool needUpdate = false;
 
 						if(port.isFlow) {
 							PortView portView = output as PortView;
@@ -196,6 +196,9 @@ namespace MaxyGames.UNode.Editors {
 										Vector2 v4 = this.ChangeCoordinatesTo(iMGUIContainer, edgeControl.controlPoints[3]);
 										DrawDebug(new Vector2[] { v1, v2, v3, v4 }, edgeControl.inputColor, edgeControl.outputColor, times, true);
 									}
+									if(times <= 1) {
+										needUpdate = true;
+									}
 								}
 							}
 						}
@@ -220,6 +223,9 @@ namespace MaxyGames.UNode.Editors {
 									}
 									else {
 										DrawDebug(v1, v4, edgeControl.inputColor, edgeControl.outputColor, times, true);
+									}
+									if(times <= .5f) {
+										needUpdate = true;
 									}
 									if(showLabel) {//Debug label
 										GUIContent debugContent;
@@ -252,6 +258,9 @@ namespace MaxyGames.UNode.Editors {
 									else {
 										DrawDebug(new Vector2[] { v1, v2, v3, v4 }, edgeControl.inputColor, edgeControl.outputColor, times, true);
 									}
+									if(times <= .5f) {
+										needUpdate = true;
+									}
 									if(showLabel) {//Debug label
 										GUIContent debugContent;
 										if(debug.value != null) {
@@ -273,6 +282,10 @@ namespace MaxyGames.UNode.Editors {
 									}
 								}
 							}
+						}
+						if(needUpdate) {
+							//This to make sure to the UI is always repaint.
+							iMGUIContainer.MarkDirtyRepaint();
 						}
 					}
 				}
@@ -340,7 +353,7 @@ namespace MaxyGames.UNode.Editors {
 			GUI.color = Color.white;
 		}
 
-		private static void DrawDebug(Vector2 start, Vector2 end, Color inColor, Color outColor, float time, bool isFlow) {
+		public static void DrawDebug(Vector2 start, Vector2 end, Color inColor, Color outColor, float time, bool isFlow) {
 			float timer = Mathf.Lerp(1, 0, time);//The debug timer speed.
 			float dist = Vector2.Distance(start, end);
 			float size = 15 * timer;
@@ -430,7 +443,7 @@ namespace MaxyGames.UNode.Editors {
 
 		public virtual void Disconnect() {
 			PortView port;
-			if(Input.isValue) {
+			if(Input?.isValue == true) {
 				port = Input;
 			}
 			else {
@@ -547,5 +560,175 @@ namespace MaxyGames.UNode.Editors {
 
 		public override UPort inputPortForNode => node.input;
 		public override UPort outputPortForNode => node.output;
+	}
+
+	public class TransitionEdgeView : EdgeView {
+		/// <summary>
+		/// The width of the transition arrow.
+		/// </summary>
+		const float arrowWidth = 12;
+
+		/// <summary>
+		/// The vertical offset used when drawing a self-transition arrow.
+		/// </summary>
+		const float selfArrowOffset = 35;
+
+		public bool showArrow = true;
+
+		/// <summary>
+		/// Initializes the transition edge by registering callbacks for geometry changes and visual content drawing.
+		/// </summary>
+		public TransitionEdgeView() : base() {
+			edgeControl.RegisterCallback<GeometryChangedEvent>(OnEdgeGeometryChanged);
+			generateVisualContent += DrawArrow;
+		}
+		public TransitionEdgeView(EdgeData data) : base(data) {
+			edgeControl.RegisterCallback<GeometryChangedEvent>(OnEdgeGeometryChanged);
+			generateVisualContent += DrawArrow;
+		}
+
+		/// <summary>
+		/// Determines whether a given point is within the bounds of the transition edge
+		/// </summary>
+		public override bool ContainsPoint(Vector2 localPoint) {
+			if(base.ContainsPoint(localPoint)) {
+				return true;
+			}
+
+			Vector2 start = PointsAndTangents[PointsAndTangents.Length / 2 - 1];
+			Vector2 end = PointsAndTangents[PointsAndTangents.Length / 2];
+			Vector2 mid = (start + end) / 2;
+
+			if(IsSelfTransition()) {
+				mid = PointsAndTangents[0] + Vector2.up * selfArrowOffset;
+			}
+
+			return (localPoint - mid).sqrMagnitude <= (arrowWidth * arrowWidth);
+		}
+
+
+		/// <summary>
+		/// Callback method for handling geometry changes in the edge's layout.
+		/// </summary>
+		/// <param name="evt">The event data containing information about the geometry change.</param>
+		void OnEdgeGeometryChanged(GeometryChangedEvent evt) {
+			if(Mathf.Abs(Mathf.RoundToInt(PointsAndTangents[0].x) - Mathf.RoundToInt(PointsAndTangents[3].x)) > 2) {
+				PointsAndTangents[1] = PointsAndTangents[0];
+				PointsAndTangents[2] = PointsAndTangents[3];
+			}
+
+			MarkDirtyRepaint();
+		}
+
+		/// <summary>
+		/// Draws the arrow for the transition edge based on its points and tangents.
+		/// </summary>
+		/// <param name="context">The mesh generation context used to allocate vertices and set visual data.</param>
+		void DrawArrow(MeshGenerationContext context) {
+			if(showArrow == false) return;
+			Vector2 start = PointsAndTangents[0];
+			Vector2 end = PointsAndTangents[3];
+			//if(start.x == end.x) {
+			//	start.x += 2;
+			//	end.x -= 2;
+			//}
+			//if(start.y == end.y) {
+			//	start.y += 2;
+			//	end.y -= 2;
+			//}
+			Vector2 mid = (start + end) / 2;
+			Vector2 direction = end - start;
+
+			if(IsSelfTransition()) {
+				mid = PointsAndTangents[0] + Vector2.up * selfArrowOffset;
+				direction = Vector2.down;
+			}
+			else {
+				if(direction.x == 0) {
+					direction.x += 4;
+				}
+				if(direction.y == 0) {
+					direction.y += 4;
+				}
+			}
+
+			float distanceFromMid = arrowWidth * Mathf.Sqrt(3) / 4;
+			float angle = Vector2.SignedAngle(Vector2.right, direction);
+			float perpendicularLength = GetPerpendicularLength(angle);
+
+			Vector2 perpendicular = new Vector2(-direction.y, direction.x).normalized * perpendicularLength;
+
+			if(IsSelfTransition()) {
+				perpendicular = Vector2.right * perpendicularLength;
+			}
+
+			MeshWriteData mesh = context.Allocate(3, 3);
+			Vertex[] vertices = new Vertex[3];
+
+			vertices[0].position = mid + (direction.normalized * distanceFromMid);
+			vertices[1].position = mid + (-direction.normalized * distanceFromMid) + (perpendicular.normalized * arrowWidth / 2);
+			vertices[2].position = mid + (-direction.normalized * distanceFromMid) + (-perpendicular.normalized * arrowWidth / 2);
+
+			for(int i = 0; i < vertices.Length; i++) {
+				vertices[i].position += Vector3.forward * Vertex.nearZ;
+				vertices[i].tint = GetColor();
+			}
+
+			mesh.SetAllVertices(vertices);
+			mesh.SetAllIndices(new ushort[] { 0, 1, 2 });
+		}
+
+		/// <summary>
+		/// Determines if the transition is a self-transition (where the input and output nodes are the same).
+		/// </summary>
+		/// <returns>True if the transition is a self-transition; otherwise, false.</returns>
+		bool IsSelfTransition() {
+			if(input != null && output != null) {
+				return input.node == output.node;
+			}
+
+			return false;
+		}
+
+		/// <summary>
+		/// Calculates the length of the perpendicular line for the arrow's direction based on the angle.
+		/// </summary>
+		/// <param name="angle">The angle of the arrow in degrees.</param>
+		/// <returns>The perpendicular length used for arrow drawing.</returns>
+		float GetPerpendicularLength(float angle) {
+			if(angle < 60 && angle > 0) {
+				return arrowWidth / (Mathf.Sin(Mathf.Deg2Rad * (angle + 120)) * 2);
+			}
+			else if(angle > -120 && angle < -60) {
+				return arrowWidth / (Mathf.Sin(Mathf.Deg2Rad * (angle - 120)) * 2);
+			}
+			else if(angle > -60 && angle < 0) {
+				return arrowWidth / (Mathf.Sin(Mathf.Deg2Rad * (angle + 60)) * 2);
+			}
+
+			return arrowWidth / (Mathf.Sin(Mathf.Deg2Rad * (angle - 60)) * 2);
+		}
+
+		/// <summary>
+		/// Retrieves the color used for the transition edge based on its state.
+		/// </summary>
+		/// <returns>The color of the transition edge.</returns>
+		Color GetColor() {
+			Color color = defaultColor;
+
+			if(output != null) {
+				color = output.portColor;
+			}
+
+			if(selected) {
+				color = selectedColor;
+			}
+
+			if(isGhostEdge) {
+				color = ghostColor;
+			}
+
+			return color;
+		}
 	}
 }

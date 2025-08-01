@@ -154,7 +154,8 @@ namespace MaxyGames.UNode.Editors {
 			static int _index;
 			internal static string randomAssemblyName => Path.GetRandomFileName() + (++_index).ToString();
 		}
-		static UnityEditor.Compilation.Assembly AssemblyCSharp {
+
+		public static UnityEditor.Compilation.Assembly AssemblyCSharp {
 			get {
 				if(CachedData.assemblyCSharp == null && CachedData.hasDefaultAssembly == null) {
 					CachedData.hasDefaultAssembly = false;
@@ -183,6 +184,7 @@ namespace MaxyGames.UNode.Editors {
 					}
 					else if(typeof(IIncrementalGenerator).IsAssignableFrom(type)) {
 						if(ReflectionUtils.CanCreateInstance(type)) {
+							sourceGenerators.Add((ReflectionUtils.CreateInstance(type) as IIncrementalGenerator).AsSourceGenerator());
 							incrementalGenerators.Add(ReflectionUtils.CreateInstance(type) as IIncrementalGenerator);
 						}
 					}
@@ -347,7 +349,7 @@ namespace MaxyGames.UNode.Editors {
 
 			if(Data.useSourceGenerators()) {
 				GetRoslynGenerators(out var sourceGenerators, out _);
-				var generatorDriver = CSharpGeneratorDriver.Create(sourceGenerators).RunGeneratorsAndUpdateCompilation(compilation, out var compilationUpdated, out _);
+				CSharpGeneratorDriver.Create(sourceGenerators).RunGeneratorsAndUpdateCompilation(compilation, out var compilationUpdated, out _);
 				compilation = compilationUpdated as CSharpCompilation;
 			}
 			using(var assemblyStream = new MemoryStream())
@@ -412,6 +414,24 @@ namespace MaxyGames.UNode.Editors {
 			return result;
 		}
 
+		public class FileAdditionalText : AdditionalText {
+			private readonly string _path;
+			private readonly SourceText _text;
+
+			public FileAdditionalText(string path) {
+				_path = path;
+				_text = SourceText.From(File.ReadAllText(path), System.Text.Encoding.UTF8);
+			}
+
+			public FileAdditionalText(string path, string text) {
+				_path = path;
+				_text = SourceText.From(text, System.Text.Encoding.UTF8);
+			}
+
+			public override string Path => _path;
+			public override SourceText GetText(CancellationToken cancellationToken = default) => _text;
+		}
+
 		private static CompileResult DoCompileAndSave(
 			string assemblyName,
 			IEnumerable<Syntax> syntaxTrees,
@@ -419,15 +439,16 @@ namespace MaxyGames.UNode.Editors {
 			List<EmbeddedText> embeddedTexts = null,
 			bool loadAssembly = true) {
 			CompileResult result = new CompileResult();
+			var option = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, optimizationLevel: OptimizationLevel.Debug);
 			var compilation = CSharpCompilation.Create(
 				assemblyName,
 				syntaxTrees: syntaxTrees,
 				references: GetMetadataReferences(),
 				options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, optimizationLevel: OptimizationLevel.Debug));
-
+			
 			if(Data.useSourceGenerators()) {
 				GetRoslynGenerators(out var sourceGenerators, out _);
-				var generatorDriver = CSharpGeneratorDriver.Create(sourceGenerators).RunGeneratorsAndUpdateCompilation(compilation, out var compilationUpdated, out _);
+				CSharpGeneratorDriver.Create(sourceGenerators).RunGeneratorsAndUpdateCompilation(compilation, out var compilationUpdated, out _);
 				compilation = compilationUpdated as CSharpCompilation;
 			}
 			using(var assemblyStream = new MemoryStream())
@@ -456,18 +477,22 @@ namespace MaxyGames.UNode.Editors {
 						result.rawPdb = symbolsStream.ToArray();
 						if(loadAssembly)
 							result.LoadAssembly();
-						var pdbPath = Path.ChangeExtension(assemblyPath, "pdb");
-						File.Open(assemblyPath, FileMode.OpenOrCreate).Close();
-						File.Open(pdbPath, FileMode.OpenOrCreate).Close();
-						File.WriteAllBytes(assemblyPath, assemblyStream.ToArray());
-						File.WriteAllBytes(pdbPath, symbolsStream.ToArray());
+						if(!string.IsNullOrEmpty(assemblyPath)) {
+							var pdbPath = Path.ChangeExtension(assemblyPath, "pdb");
+							File.Open(assemblyPath, FileMode.OpenOrCreate).Close();
+							File.Open(pdbPath, FileMode.OpenOrCreate).Close();
+							File.WriteAllBytes(assemblyPath, assemblyStream.ToArray());
+							File.WriteAllBytes(pdbPath, symbolsStream.ToArray());
+						}
 					}
 					else {
 						result.rawAssembly = assemblyStream.ToArray();
 						if(loadAssembly)
 							result.LoadAssembly();
-						File.Open(assemblyPath, FileMode.OpenOrCreate).Close();
-						File.WriteAllBytes(assemblyPath, assemblyStream.ToArray());
+						if(!string.IsNullOrEmpty(assemblyPath)) {
+							File.Open(assemblyPath, FileMode.OpenOrCreate).Close();
+							File.WriteAllBytes(assemblyPath, assemblyStream.ToArray());
+						}
 					}
 				}
 				else {
@@ -688,19 +713,36 @@ namespace MaxyGames.UNode.Editors {
 			return true;
 		}
 
+		private static bool IsValidType(Type type, ITypeSymbol typeSymbol) {
+			if(type == null && typeSymbol == null) return true;
+			if(type == null || typeKeywords == null) return false;
+			if(type.IsGenericParameter && type.IsConstructedGenericType == false) {
+				if(typeSymbol.TypeKind != TypeKind.TypeParameter) {
+					return false;
+				}
+				if(type.Name != typeSymbol.Name) {
+					return false;
+				}
+			}
+			else if(type != GetTypeFromTypeSymbol(typeSymbol)) {
+				return false;
+			}
+			return true;
+		}
+
 		private static bool IsValidMember(MethodInfo method, IMethodSymbol symbol) {
 			if(method.Name != symbol.Name)
 				return false;
 			if(method.IsGenericMethod && symbol.IsGenericMethod == false)
 				return false;
-			if(method.ReturnType != GetTypeFromTypeSymbol(symbol.ReturnType))
+			if(IsValidType(method.ReturnType, symbol.ReturnType) == false)
 				return false;
 			var mparam = method.GetParameters();
 			var sparam = symbol.Parameters;
 			if(mparam.Length != sparam.Length)
 				return false;
 			for(int i = 0; i < mparam.Length; i++) {
-				if(mparam[i].ParameterType != GetTypeFromTypeSymbol(sparam[i].Type)) {
+				if(IsValidType(mparam[i].ParameterType, sparam[i].Type) == false) {
 					return false;
 				}
 			}
@@ -946,6 +988,9 @@ namespace MaxyGames.UNode.Editors {
 			}
 			//Check if type is nested type
 			if(typeSymbol.ContainingType != null) {
+				//if(typeSymbol is ITypeParameterSymbol) {
+				//	Debug.Log("A");
+				//}
 				return (GetTypeFromTypeSymbol(typeSymbol.ContainingType).FullName + "+" + typeSymbol.Name + (isByRef ? "&" : "")).ToType();
 			}
 			Type type = TypeSerializer.Deserialize(typeSymbol.ToString() + (isByRef ? "&" : ""), false);

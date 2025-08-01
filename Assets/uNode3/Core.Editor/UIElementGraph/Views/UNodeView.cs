@@ -21,6 +21,8 @@ namespace MaxyGames.UNode.Editors {
 		public const string ussClassBorderFlowNode = "flowNodeBorder";
 		public const string ussClassBorderOnlyInput = "onlyInput";
 		public const string ussClassBorderOnlyOutput = "onlyOutput";
+		public const string ussClassBorderHasInputValue = "hasInputValue";
+		public const string ussClassBorderHasOutputValue = "hasOutputValue";
 		public const string ussClassEntryNode = "entry-node";
 
 		public const string ussClassAutoHideControl = "autohide";
@@ -78,7 +80,7 @@ namespace MaxyGames.UNode.Editors {
 
 		public UIElementGraph graph {
 			get {
-				return owner.graph;
+				return owner.graphEditor;
 			}
 		}
 
@@ -109,6 +111,7 @@ namespace MaxyGames.UNode.Editors {
 		protected VisualElement debugContainer;
 		protected VisualElement border;
 		protected Image titleIcon;
+		protected Label titleLabel;
 		#endregion
 
 		#region Initialization
@@ -147,6 +150,7 @@ namespace MaxyGames.UNode.Editors {
 			controlsContainer = new VisualElement { name = "controls" };
 			mainContainer.Add(controlsContainer);
 
+			titleLabel = titleContainer.Q<Label>("title-label");
 			titleIcon = new Image() { name = "title-icon" };
 			titleContainer.Add(titleIcon);
 			titleIcon.SendToBack();
@@ -237,7 +241,14 @@ namespace MaxyGames.UNode.Editors {
 		/// Called once on node created.
 		/// </summary>
 		protected virtual void OnSetup() {
-
+			{//Add styles
+				var styles = nodeObject.Styles;
+				if(styles != null) {
+					for(int i = 0; i < styles.Length; i++) {
+						AddToClassList(styles[i]);
+					}
+				}
+			}
 			if(nodeObject.node is BaseEntryNode) {
 				this.AddToClassList(ussClassEntryNode);
 			}
@@ -465,7 +476,7 @@ namespace MaxyGames.UNode.Editors {
 		}
 
 		/// <summary>
-		/// Increment update the UI
+		/// Increment update the UI, this also called after ReloadView
 		/// </summary>
 		public virtual void UpdateUI() {
 			RefreshPortTypes();
@@ -505,6 +516,39 @@ namespace MaxyGames.UNode.Editors {
 
 		public virtual void RegisterUndo(string name = "") {
 			uNodeEditorUtility.RegisterUndo(nodeObject.GetUnityObject(), name);
+		}
+
+		public virtual void OnZoomUpdated(float zoom) {
+			if(zoom > 0.2f) {
+				titleIcon.style.visibility = StyleKeyword.Null;
+				titleLabel.style.visibility = StyleKeyword.Null;
+				if(portInputContainer != null) {
+					portInputContainer.style.display = StyleKeyword.Null;
+				}
+			}
+			else {
+				titleIcon.style.visibility = Visibility.Hidden;
+				titleLabel.style.visibility = Visibility.Hidden;
+				if(portInputContainer != null) {
+					portInputContainer.style.display = DisplayStyle.None;
+				}
+			}
+			if(zoom > 0.3f) {
+				foreach(var p in inputPorts) {
+					p.visible = true;
+				}
+				foreach(var p in outputPorts) {
+					p.visible = true;
+				}
+			}
+			else {
+				foreach(var p in inputPorts) {
+					p.visible = false;
+				}
+				foreach(var p in outputPorts) {
+					p.visible = false;
+				}
+			}
 		}
 
 		/// <summary>
@@ -553,9 +597,9 @@ namespace MaxyGames.UNode.Editors {
 		public override void BuildContextualMenu(ContextualMenuPopulateEvent evt) {
 			if(nodeObject.node is ISuperNode) {
 				evt.menu.AppendAction("Open...", (e) => {
-					owner.graph.graphData.currentCanvas = targetNode.nodeObject;
-					owner.graph.Refresh();
-					owner.graph.UpdatePosition();
+					owner.graphEditor.graphData.currentCanvas = targetNode.nodeObject;
+					owner.graphEditor.Refresh();
+					owner.graphEditor.UpdatePosition();
 				}, DropdownMenuAction.AlwaysEnabled);
 			}
 		}
@@ -568,6 +612,8 @@ namespace MaxyGames.UNode.Editors {
 			}
 			return null;
 		}
+
+		public virtual UGraphElement GetSelectableObject() => nodeObject;
 
 		public void UpdateError(string message) {
 			if(!string.IsNullOrEmpty(message)) {//Has error
@@ -585,6 +631,31 @@ namespace MaxyGames.UNode.Editors {
 					errorBadge = null;
 				}
 			}
+		}
+
+		/// <summary>
+		/// Do update the node
+		/// </summary>
+		protected virtual void DoUpdate() {
+			if(!this.IsVisible())
+				return;
+			#region Errors
+			var errors = GraphUtility.ErrorChecker.GetErrorMessages(nodeObject, InfoType.Error);
+			if(errors != null && errors.Any()) {
+				System.Text.StringBuilder sb = new System.Text.StringBuilder();
+				foreach(var error in errors) {
+					if(sb.Length > 0) {
+						sb.AppendLine();
+						sb.AppendLine();
+					}
+					sb.Append("-" + uNodeEditorUtility.RemoveHTMLTag(error.message));
+				}
+				UpdateError(sb.ToString());
+			}
+			else {
+				UpdateError(string.Empty);
+			}
+			#endregion
 		}
 
 		public virtual void Teleport(Rect position) {

@@ -662,6 +662,7 @@ namespace MaxyGames.UNode.Editors {
 
 			var refreshBtn = new ToolbarButton(() => {
 				window?.Refresh(true);
+				window?.graphEditor.Validate();
 			}) {
 				text = "Refresh",
 				tooltip = "Refresh the graph.\nHotkey: F5",
@@ -806,7 +807,7 @@ namespace MaxyGames.UNode.Editors {
 
 													var members = member.GetMembers(false);
 													if(members != null && members.Length > 0) {
-														for(int i=0;i<members.Length;i++) {
+														for(int i = 0; i < members.Length; i++) {
 															members[i] = ReflectionUtils.GetRuntimeMember(members[i]) ?? members[i];
 														}
 													}
@@ -1161,7 +1162,13 @@ namespace MaxyGames.UNode.Editors {
 			}
 			#endregion
 
-			#region Pathbar
+			ReloadPathbar();
+
+			rootContent.Add(tabbarContainer);
+			tabbarContainer.SendToBack();
+		}
+
+		private void ReloadPathbar() {
 			var pathbar = new VisualElement() {
 				name = "pathbar"
 			};
@@ -1280,6 +1287,10 @@ namespace MaxyGames.UNode.Editors {
 							if(parentNode.node is ISuperNode) {
 								GN.Add(parentNode);
 							}
+							if(parentNode.node is INodeWithCustomCanvas canvas) {
+								parent = canvas.ParentCanvas;
+								continue;
+							}
 						}
 						else if(parent is NodeContainer) {
 							break;
@@ -1315,10 +1326,6 @@ namespace MaxyGames.UNode.Editors {
 				pathbar.Add(graph);
 			}
 			tabbarContainer.Add(pathbar);
-			#endregion
-
-			rootContent.Add(tabbarContainer);
-			tabbarContainer.SendToBack();
 		}
 
 		public override void FrameGraph() {
@@ -1428,7 +1435,7 @@ namespace MaxyGames.UNode.Editors {
 		}
 
 		public bool isGraphLoaded {
-			get { return graphView != null && graphView.graph != null; }
+			get { return graphView != null && graphView.graphEditor != null; }
 		}
 
 		void InitializeRootView() {
@@ -1735,66 +1742,9 @@ namespace MaxyGames.UNode.Editors {
 					needReloadMainTab = false;
 					explorerTree.Reload();
 				}
-				mainGUIContainer = new IMGUIContainer(() => {
-					var areaRect = new Rect(0, 0, mainGUIContainer.layout.width, mainGUIContainer.layout.height);
-					var explorerRect = areaRect;
-					if(explorerRect.width > 400) {
-						var rect = new Rect(400, 0, explorerRect.width - 400, explorerRect.height);
-						explorerRect.width = 400;
-						if(rect.width > 300) {
-							explorerRect.width += rect.width - 300;
-							rect.x += rect.width - 300;
-							rect.width = 300;
-						}
-						GUILayout.BeginArea(rect);
-						if(GUILayout.Button(new GUIContent("New Graph"))) {
-							GraphCreatorWindow.ShowWindow();
-							Event.current.Use();
-						}
-						if(GUILayout.Button(new GUIContent("Open Graph"))) {
-							uNodeEditor.OpenFilePanel();
-						}
-						if(Selection.activeGameObject == null) {
-							EditorGUILayout.HelpBox("Double Click a uNode Graph Assets to edit the graph or click 'New Graph' to create a new graph.\n" +
-								"Or select a GameObject in hierarchy to create a new Scene Graph", MessageType.Info);
-						}
-						else {
-							if(uNodeEditorUtility.IsPrefab(Selection.activeGameObject)) {
-								var comp = Selection.activeGameObject.GetComponent<IInstancedGraph>();
-								//if(comp is uNodeRuntime) {
-								//	EditorGUILayout.HelpBox(string.Format("To edit graph or create a new uNode graph with \'{0}\', please open the prefab", Selection.activeGameObject.name), MessageType.Info);
-								//}
-								if(comp != null && comp.OriginalGraph != null) {
-									if(GUILayout.Button(new GUIContent("Edit Graph"))) {
-										uNodeEditor.Open(comp.OriginalGraph);
-										Event.current.Use();
-										return;
-									}
-									EditorGUILayout.HelpBox(string.Format("To edit \'{0}\' graph, please edit graph in new Tab", Selection.activeGameObject.name), MessageType.Info);
-								}
-							}
-							else {
-								if(GUILayout.Button(new GUIContent("Create from Selection"))) {
-									var graph = Selection.activeGameObject.AddComponent<GraphComponent>();
-									uNodeEditor.Open(graph);
-									Event.current.Use();
-									return;
-								}
-								EditorGUILayout.HelpBox(string.Format("To begin a new uNode graph with \'{0}\', create a uNode component", Selection.activeGameObject.name), MessageType.Info);
-							}
-						}
-						GUILayout.EndArea();
-					}
-					var search = explorerSearch.OnGUI(new Rect(0, 0, explorerRect.width, 16), explorerTree.searchString);
-					if(search != explorerTree.searchString) {
-						explorerTree.searchString = search;
-						explorerTree.Reload();
-					}
-					explorerRect.height -= 16;
-					explorerRect.y += 16;
-					explorerTree.OnGUI(explorerRect);
-				});
+				mainGUIContainer = new IMGUIContainer(DrawMainTabGUI);
 				mainGUIContainer.style.flexGrow = 1;
+				mainGUIContainer.cullingEnabled = true;
 			}
 
 			if(mainGUIContainer.parent == null) {
@@ -1810,6 +1760,66 @@ namespace MaxyGames.UNode.Editors {
 			//if(rightPanelSplitter?.parent != null) {
 			//	rightPanelSplitter.RemoveFromHierarchy();
 			//}
+		}
+
+		void DrawMainTabGUI() {
+			var areaRect = new Rect(0, 0, mainGUIContainer.layout.width, mainGUIContainer.layout.height);
+			var explorerRect = areaRect;
+			if(explorerRect.width > 400) {
+				var rect = new Rect(400, 0, explorerRect.width - 400, explorerRect.height);
+				explorerRect.width = 400;
+				if(rect.width > 300) {
+					explorerRect.width += rect.width - 300;
+					rect.x += rect.width - 300;
+					rect.width = 300;
+				}
+				GUILayout.BeginArea(rect);
+				if(GUILayout.Button(new GUIContent("New Graph"))) {
+					GraphCreatorWindow.ShowWindow();
+					Event.current.Use();
+				}
+				if(GUILayout.Button(new GUIContent("Open Graph"))) {
+					uNodeEditor.OpenFilePanel();
+				}
+				if(Selection.activeGameObject == null) {
+					EditorGUILayout.HelpBox("Double Click a uNode Graph Assets to edit the graph or click 'New Graph' to create a new graph.\n" +
+						"Or select a GameObject in hierarchy to create a new Scene Graph", MessageType.Info);
+				}
+				else {
+					if(uNodeEditorUtility.IsPrefab(Selection.activeGameObject)) {
+						var comp = Selection.activeGameObject.GetComponent<IInstancedGraph>();
+						//if(comp is uNodeRuntime) {
+						//	EditorGUILayout.HelpBox(string.Format("To edit graph or create a new uNode graph with \'{0}\', please open the prefab", Selection.activeGameObject.name), MessageType.Info);
+						//}
+						if(comp != null && comp.OriginalGraph != null) {
+							if(GUILayout.Button(new GUIContent("Edit Graph"))) {
+								uNodeEditor.Open(comp.OriginalGraph);
+								Event.current.Use();
+								return;
+							}
+							EditorGUILayout.HelpBox(string.Format("To edit \'{0}\' graph, please edit graph in new Tab", Selection.activeGameObject.name), MessageType.Info);
+						}
+					}
+					else {
+						if(GUILayout.Button(new GUIContent("Create from Selection"))) {
+							var graph = Selection.activeGameObject.AddComponent<GraphComponent>();
+							uNodeEditor.Open(graph);
+							Event.current.Use();
+							return;
+						}
+						EditorGUILayout.HelpBox(string.Format("To begin a new uNode graph with \'{0}\', create a uNode component", Selection.activeGameObject.name), MessageType.Info);
+					}
+				}
+				GUILayout.EndArea();
+			}
+			var search = explorerSearch.OnGUI(new Rect(0, 0, explorerRect.width, 16), explorerTree.searchString);
+			if(search != explorerTree.searchString) {
+				explorerTree.searchString = search;
+				explorerTree.Reload();
+			}
+			explorerRect.height -= 16;
+			explorerRect.y += 16;
+			explorerTree.OnGUI(explorerRect);
 		}
 
 		public override void DrawCanvas(uNodeEditor window) {
@@ -1914,6 +1924,27 @@ namespace MaxyGames.UNode.Editors {
 			if(element is NodeObject) {
 				graphView.HighlightNodes(new NodeObject[] { element as NodeObject });
 			}
+		}
+
+		public override void SelectionAddRegion(Vector2 position) {
+			var selectedNodes = graphView.selection.Where(obj => obj is UNodeView view && view.nodeObject != null && view.isBlock == false).Select(obj => obj as UNodeView).ToArray();
+			Rect rect;
+			if(selectedNodes.Length > 0) {
+				rect = UIElementUtility.GetNodeRect(selectedNodes);
+			}
+			else {
+				rect = new Rect(position.x, position.y, 200, 130);
+			}
+			uNodeEditorUtility.RegisterUndo(graphData.owner, "Create region");
+			NodeEditorUtility.AddNewNode<Nodes.NodeRegion>(graphData, default, (node) => {
+				rect.x -= 30;
+				rect.y -= 50;
+				rect.width += 60;
+				rect.height += 70;
+				node.position = rect;
+				node.nodeColor = new Color(UnityEngine.Random.Range(0f, 1f), UnityEngine.Random.Range(0f, 1f), UnityEngine.Random.Range(0f, 1f));
+			});
+			Refresh();
 		}
 	}
 

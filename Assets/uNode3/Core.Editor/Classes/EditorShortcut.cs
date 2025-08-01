@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
@@ -10,8 +10,8 @@ namespace MaxyGames.UNode.Editors {
 		Refresh,
 		Rename,
 		AddNode,
-        AddFavoriteNode,
-        CreateRegion,
+		AddNodeFromFavorites,
+		CreateRegion,
 		FrameGraph,
 		OpenCommand,
 		CopySelectedNodes,
@@ -80,6 +80,16 @@ namespace MaxyGames.UNode.Editors {
 			GenerationUtility.GenerateNativeGraphsInProject();
 		}
 
+		[Shortcut("uNode/Delete Generated C# Scripts")]
+		static void Shortcut_DeleteGeneratedScript(ShortcutArguments args) {
+			if(Application.isPlaying) {
+				uNodeEditorUtility.DisplayErrorMessage("Cannot delete generated scripts in play mode");
+				return;
+			}
+			GenerationUtility.DeleteGeneratedCSharpScript();
+			Debug.Log("Deleting Generated Script success");
+		}
+
 		[Shortcut("uNode/Refresh", typeof(uNodeEditor), KeyCode.F5)]
 		static void Shortcut_Refresh(ShortcutArguments args) {
 			var window = args.context as uNodeEditor;
@@ -104,16 +114,14 @@ namespace MaxyGames.UNode.Editors {
 			}
 		}
 
-        [Shortcut("uNode/Add Favorite Node", typeof(uNodeEditor), KeyCode.Space, ShortcutModifiers.Action)]
-        static void Shortcut_AddFavoriteNode(ShortcutArguments args)
-        {
-            var window = args.context as uNodeEditor;
-            if (window != null)
-            {
-                window.graphEditor.HandleShortcut(GraphShortcutType.AddFavoriteNode);
-            }
-        }
-        
+		[Shortcut("uNode/Add Node From Favorites", typeof(uNodeEditor), KeyCode.Space, ShortcutModifiers.Action)]
+		static void Shortcut_AddNodeFromFavorites(ShortcutArguments args) {
+			var window = args.context as uNodeEditor;
+			if(window != null) {
+				window.graphEditor.HandleShortcut(GraphShortcutType.AddNodeFromFavorites);
+			}
+		}
+
 		[Shortcut("uNode/Quick Create Region", typeof(uNodeEditor), KeyCode.F, ShortcutModifiers.Action)]
 		static void Shortcut_QuickCreateRegion(ShortcutArguments args) {
 			var window = args.context as uNodeEditor;
@@ -145,16 +153,16 @@ namespace MaxyGames.UNode.Editors {
 		//		window.graphEditor.HandleShortcut(GraphShortcutType.OpenCommand);
 		//	}
 		//}
-        
+
 		//[Shortcut("uNode/Graph Canvas/Add - Remove Node from selection", typeof(uNodeEditor), KeyCode.Mouse0, ShortcutModifiers.Action)]
-        //static void Shortcut_AddOrRemoveNode(ShortcutArguments args) {
-        //	var window = args.context as uNodeEditor;
-        //	if(window != null) {
+		//static void Shortcut_AddOrRemoveNode(ShortcutArguments args) {
+		//	var window = args.context as uNodeEditor;
+		//	if(window != null) {
 
-        //	}
-        //}
+		//	}
+		//}
 
-        [Shortcut("uNode/Select all nodes", typeof(uNodeEditor), KeyCode.A, ShortcutModifiers.Action)]
+		[Shortcut("uNode/Select all nodes", typeof(uNodeEditor), KeyCode.A, ShortcutModifiers.Action)]
 		static void Shortcut_SelectAll(ShortcutArguments args) {
 			var window = args.context as uNodeEditor;
 			if(window != null) {

@@ -94,13 +94,14 @@ namespace MaxyGames.UNode {
 	}
 
 	public sealed class NodeObject : UGraphElement, ISerializationCallbackReceiver, IErrorCheck, IPrettyName, IRichName, IIcon {
+		[Hide]
 		public bool nodeExpanded = true;
 		/// <summary>
 		/// The node position in graph.
 		/// </summary>
 		public Rect position;
 
-		[SerializeField]
+		[SerializeField, Hide]
 		private NodeSerializedData _nodeSerializedData;
 
 		public NodeSerializedData serializedData => _nodeSerializedData;
@@ -123,6 +124,11 @@ namespace MaxyGames.UNode {
 				}
 			}
 		}
+
+		/// <summary>
+		/// The node styles
+		/// </summary>
+		public string[] Styles => node.Styles;
 
 		#region Constructors
 		public NodeObject() { }
@@ -267,6 +273,7 @@ namespace MaxyGames.UNode {
 		public bool isPreviousPortRestored { get; private set; }
 		[field: NonSerialized]
 		public Exception exceptionRegister { get; private set; }
+		[Hide]
 		private NodePreservation preservation;
 
 		internal void OnGeneratorInitialize() {
@@ -466,11 +473,11 @@ namespace MaxyGames.UNode {
 		}
 
 		public bool CanSetValue() {
-			return node?.CanSetValue() ?? false;
+			return primaryValueOutput?.CanSetValue() ?? false;
 		}
 
 		public bool CanGetValue() {
-			return node?.CanGetValue() ?? false;
+			return primaryValueOutput?.CanGetValue() ?? false;
 		}
 
 		/// <summary>
@@ -478,7 +485,7 @@ namespace MaxyGames.UNode {
 		/// </summary>
 		/// <returns></returns>
 		public Type ReturnType() {
-			return node?.ReturnType();
+			return primaryValueOutput?.type ?? typeof(object);
 		}
 
 		/// <summary>
@@ -590,7 +597,7 @@ namespace MaxyGames.UNode {
 
 		public override string ToString() {
 			if(!object.ReferenceEquals(_node, null)) {
-				return _node.GetTitle() + $" ({_node.GetType()})";
+				return _node.GetTitle() + $" ({_node.GetType()}) (id:{id})";
 			}
 			return base.ToString();
 		}

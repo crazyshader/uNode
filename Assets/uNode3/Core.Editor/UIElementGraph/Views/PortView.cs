@@ -66,9 +66,7 @@ namespace MaxyGames.UNode.Editors {
 				AddToClassList("value-port");
 			}
 
-			m_EdgeConnector = new EdgeConnector<EdgeView>(this);
 			this.AddManipulator(new ContextualMenuManipulator(BuildContextualMenu));
-			this.AddManipulator(m_EdgeConnector);
 			this.ExecuteAndScheduleAction(DoUpdate, 1000);
 			if(portData.portValue is ValueInput input && input.IsOptional) {
 				optionalElement = new VisualElement {
@@ -93,6 +91,10 @@ namespace MaxyGames.UNode.Editors {
 			}
 			this.portData = portData;
 			ReloadView(true);
+
+			if(m_EdgeConnector == null) {
+				SetEdgeConnector<EdgeView>();
+			}
 		}
 
 		public virtual void ReloadView(bool refreshName = false) {
@@ -367,6 +369,7 @@ namespace MaxyGames.UNode.Editors {
 						proxyDebug.style.position = Position.Absolute;
 						proxyDebug.style.overflow = Overflow.Visible;
 						proxyDebug.pickingMode = PickingMode.Ignore;
+						proxyDebug.cullingEnabled = true;
 						proxyContainer.Add(proxyDebug);
 					}
 					connector.Add(proxyContainer);
@@ -383,7 +386,7 @@ namespace MaxyGames.UNode.Editors {
 		#region Debug
 		void DebugGUI() {
 			if(Application.isPlaying && GraphDebug.useDebug && proxyContainer != null) {
-				GraphDebug.DebugData debugData = owner.owner.graph.GetDebugInfo();
+				GraphDebug.DebugData debugData = owner.owner.graphEditor.GetDebugInfo();
 				if(debugData != null) {
 					if(isValue && direction == Direction.Input) {
 						var port = GetPortValue<ValueInput>();
@@ -448,7 +451,7 @@ namespace MaxyGames.UNode.Editors {
 		#region Drop Port
 
 		private void OnDropOutsidePortFromFlowOutput(Vector2 position, PortView portView, PortView sidePort) {
-			owner.owner.graph.ShowNodeMenu(position, null, (n) => {
+			owner.owner.graphEditor.ShowNodeMenu(position, null, (n) => {
 				FlowInput flow = null;
 				if(n.nodeObject.primaryFlowInput != null) {
 					flow = n.nodeObject.primaryFlowInput;
@@ -460,8 +463,8 @@ namespace MaxyGames.UNode.Editors {
 					Connection.CreateAndConnect(flow, portView.GetPortValue());
 				}
 				else {
-					if(n is MultipurposeNode mNode && mNode.CanSetValue()) {
-						var rType = mNode.ReturnType();
+					if(n is MultipurposeNode mNode && mNode.nodeObject.CanSetValue()) {
+						var rType = mNode.nodeObject.ReturnType();
 						if(rType.IsCastableTo(typeof(Delegate)) || rType.IsCastableTo(typeof(UnityEngine.Events.UnityEventBase))) {
 							NodeEditorUtility.AddNewNode(owner.owner.graphData, null, null, position, (Nodes.EventHook nod) => {
 								nod.EnsureRegistered();
@@ -473,8 +476,8 @@ namespace MaxyGames.UNode.Editors {
 							NodeEditorUtility.AddNewNode(owner.owner.graphData, null, null, position, (Nodes.NodeSetValue nod) => {
 								nod.EnsureRegistered();
 								Connection.CreateAndConnect(nod.target, n.nodeObject.primaryValueOutput);
-								if(n.ReturnType() != typeof(void)) {
-									nod.value.AssignToDefault(MemberData.Default(n.ReturnType()));
+								if(n.nodeObject.ReturnType() != typeof(void)) {
+									nod.value.AssignToDefault(MemberData.Default(n.nodeObject.ReturnType()));
 								}
 								Connection.CreateAndConnect(portView.GetPortValue(), nod.nodeObject.primaryFlowInput);
 							});
@@ -490,10 +493,10 @@ namespace MaxyGames.UNode.Editors {
 		}
 
 		private void OnDropOutsidePortFromFlowInput(Vector2 position, PortView portView, PortView sidePort) {
-			owner.owner.graph.ShowNodeMenu(position, null, (n) => {
+			owner.owner.graphEditor.ShowNodeMenu(position, null, (n) => {
 				n.EnsureRegistered();
-				if(n is MultipurposeNode mNode && !mNode.IsFlowNode() && mNode.CanSetValue()) {
-					var rType = mNode.ReturnType();
+				if(n is MultipurposeNode mNode && !mNode.IsFlowNode() && mNode.nodeObject.CanSetValue()) {
+					var rType = mNode.nodeObject.ReturnType();
 					if(rType.IsCastableTo(typeof(Delegate)) || rType.IsCastableTo(typeof(UnityEngine.Events.UnityEventBase))) {
 						NodeEditorUtility.AddNewNode(owner.owner.graphData, null, null, position, (Nodes.EventHook nod) => {
 							nod.EnsureRegistered();
@@ -505,8 +508,8 @@ namespace MaxyGames.UNode.Editors {
 						NodeEditorUtility.AddNewNode(owner.owner.graphData, null, null, position, (Nodes.NodeSetValue nod) => {
 							nod.EnsureRegistered();
 							nod.target.ConnectTo(n.nodeObject.primaryValueOutput);
-							if(n.ReturnType() != typeof(void)) {
-								nod.value.AssignToDefault(MemberData.CreateValueFromType(n.ReturnType()));
+							if(n.nodeObject.ReturnType() != typeof(void)) {
+								nod.value.AssignToDefault(MemberData.CreateValueFromType(n.nodeObject.ReturnType()));
 							}
 							n = nod;
 						});
@@ -601,7 +604,7 @@ namespace MaxyGames.UNode.Editors {
 					foreach(var command in portCommands) {
 						if(command.onlyContextMenu)
 							continue;
-						command.graph = owner.owner.graph;
+						command.graph = owner.owner.graphEditor;
 						command.mousePositionOnCanvas = position;
 						command.filter = portData.GetFilter();
 						if(command.IsValidPort(owner.targetNode, commandData)) {
@@ -614,10 +617,10 @@ namespace MaxyGames.UNode.Editors {
 					}
 				}
 			}
-			owner.owner.graph.ShowNodeMenu(position, FA, (n) => {
-				if(n.CanGetValue()) {
+			owner.owner.graphEditor.ShowNodeMenu(position, FA, (n) => {
+				if(n.nodeObject.CanGetValue()) {
 					if(n is MultipurposeNode mNode) {
-						var type = mNode.ReturnType();
+						var type = mNode.nodeObject.ReturnType();
 						Type rightType = type;
 						for(int i = 0; i < types.Count; i++) {
 							if(NodeEditorUtility.CanAutoConvertType(type, types[i])) {
@@ -643,7 +646,7 @@ namespace MaxyGames.UNode.Editors {
 						sidePort.ResetPortValue();
 					}
 				}
-			}, NodeFilter.ValueInput, additionalItems: customItems, expandedCategory: new[] { "@" });
+			}, NodeFilter.ValueInput, additionalItems: customItems, expandedCategory: new[] { "@", "Data" });
 		}
 
 		private void OnDropOutsidePortFromValueOutput(Vector2 position, PortView portView, PortView sidePort) {
@@ -693,7 +696,7 @@ namespace MaxyGames.UNode.Editors {
 				if(customInputItems != null && customInputItems.Count > 0) {
 					var source = portView.GetPortValue() as ValueOutput;
 					foreach(var c in customInputItems) {
-						c.graphEditor = owner.owner.graph;
+						c.graphEditor = owner.owner.graphEditor;
 						c.mousePositionOnCanvas = position;
 						if(c.IsValidPort(source,
 							canSetValue && canGetValue ?
@@ -717,7 +720,7 @@ namespace MaxyGames.UNode.Editors {
 					foreach(var command in portCommands) {
 						if(command.onlyContextMenu)
 							continue;
-						command.graph = owner.owner.graph;
+						command.graph = owner.owner.graphEditor;
 						command.mousePositionOnCanvas = position;
 						command.filter = portData.GetFilter();
 						if(command.IsValidPort(owner.targetNode, commandData)) {
@@ -735,7 +738,7 @@ namespace MaxyGames.UNode.Editors {
 					customItems.Add(ItemSelector.CustomItem.Create(
 						menuItem,
 						() => {
-							NodeEditorUtility.AddNewNode<Node>(owner.graphData, menuItem.nodeName ?? menuItem.name.Split(' ')[0], menuItem.type, position, n => {
+							NodeEditorUtility.AddNewNode<Node>(owner.graphData, menuItem.nodeName, menuItem.type, position, n => {
 								NodeEditorUtility.AutoConnectPortToTarget(portView.GetPortValue(), n, owner.graphData.currentCanvas);
 								owner.MarkRepaint();
 							});
@@ -752,7 +755,7 @@ namespace MaxyGames.UNode.Editors {
 				FA.Static = true;
 				ItemSelector.SortCustomItems(customItems);
 				ItemSelector w = ItemSelector.ShowWindow(portView.owner.nodeObject, FA, (MemberData mData) => {
-					GraphEditor.CreateNodeProcessor(mData, owner.owner.graph.graphData, position, (n) => {
+					GraphEditor.CreateNodeProcessor(mData, owner.owner.graphEditor.graphData, position, (n) => {
 						bool needAutoConnect = true;
 						if(n is MultipurposeNode multipurposeNode && multipurposeNode.instance != null) {//For auto connect to parameter ports
 							if(type.IsCastableTo(mData.startType)) {
@@ -776,17 +779,17 @@ namespace MaxyGames.UNode.Editors {
 							sidePort.ResetPortValue();
 						}
 					});
-				}, customItems: customItems).ChangePosition(owner.owner.graph.GetMenuPosition());
+				}, customItems: customItems).ChangePosition(owner.owner.graphEditor.GetMenuPosition());
 				w.displayRecentItem = false;
 				w.displayNoneOption = false;
 				if(type == typeof(bool)) {
 					w.defaultExpandedItems = new[] { "@", "Operator", "Data", "Flow" };
 				}
 				else if(type == typeof(int) || type == typeof(float) || type == typeof(byte) || type == typeof(sbyte) || type == typeof(double) || type == typeof(long)) {
-					w.defaultExpandedItems = new[] { "@", "Operator", "Flow" };
+					w.defaultExpandedItems = new[] { "@", "Operator", "Data", "Flow" };
 				}
 				else {
-					w.defaultExpandedItems = new[] { "@", "Operator", "Data Members", "Flow" };
+					w.defaultExpandedItems = new[] { "@", "Operator", "Data", "Data Members", "Flow" };
 				}
 			}
 		}
@@ -794,11 +797,18 @@ namespace MaxyGames.UNode.Editors {
 		public void OnDropOutsidePort(Edge edge, Vector2 position) {
 			var input = edge.input as PortView;
 			var output = edge.output as PortView;
-			var screenRect = owner.owner.graph.window.GetMousePositionForMenu(position);
-			Vector2 pos = owner.owner.graph.window.rootVisualElement.ChangeCoordinatesTo(
-				owner.owner.graph.window.rootVisualElement.parent,
-				screenRect - owner.owner.graph.window.position.position);
+			var screenRect = owner.owner.graphEditor.window.GetMousePositionForMenu(position);
+			Vector2 pos = owner.owner.graphEditor.window.rootVisualElement.ChangeCoordinatesTo(
+				owner.owner.graphEditor.window.rootVisualElement.parent,
+				screenRect - owner.owner.graphEditor.window.position.position);
 			position = owner.owner.contentViewContainer.WorldToLocal(pos);
+
+			foreach(var p in UGraphView.GraphProcessor) {
+				if(p.HandlePortOnDropOutsidePort(owner.owner, edge as EdgeView, position)) {
+					return;
+				}
+			}
+
 			PortView sidePort = null;
 			if(input != null && output != null) {
 				var draggedPort = input.edgeConnector?.edgeDragHelper?.draggedPort ?? output.edgeConnector?.edgeDragHelper?.draggedPort;
@@ -1087,23 +1097,64 @@ namespace MaxyGames.UNode.Editors {
 
 		public void OnDrop(GraphView graphView, Edge edge) {
 			var edgeView = edge as EdgeView;
-			var graph = graphView as UGraphView;
-			if(graph == null || edgeView == null || edgeView.input == null || edgeView.output == null)
+			var ugraphView = graphView as UGraphView;
+			foreach(var p in UGraphView.GraphProcessor) {
+				if(p.HandlePortOnDrop(ugraphView, edgeView)) {
+					return;
+				}
+			}
+
+			if(ugraphView == null || edgeView == null || edgeView.input == null || edgeView.output == null)
 				return;
 			if(edgeView.Input.isValue) {
 				if(edgeView.input == this) {
-					OnDropInsideValueOutput(graph, edgeView);
+					OnDropInsideValueOutput(ugraphView, edgeView);
 				}
 				else {
-					OnDropInsideValueInput(graph, edgeView);
+					OnDropInsideValueInput(ugraphView, edgeView);
 				}
 			}
 			else {
-				uNodeEditorUtility.RegisterUndo(graph.graphData.owner, "Connect port");
-				graph.Connect(edgeView, true);
+				uNodeEditorUtility.RegisterUndo(ugraphView.graphData.owner, "Connect port");
+				ugraphView.Connect(edgeView, true);
 			}
 		}
-#endregion
+		#endregion
+
+		#region Edges
+		public void SetEdgeConnector(EdgeConnector connector) {
+			if(m_EdgeConnector != null) {
+				this.RemoveManipulator(m_EdgeConnector);
+			}
+			m_EdgeConnector = connector;
+			this.AddManipulator(m_EdgeConnector);
+		}
+
+		public void SetEdgeConnector<TEdge>() where TEdge : EdgeView, new() {
+			SetEdgeConnector(new EdgeConnector<TEdge>(this));
+		}
+
+		public void SetEdgeConnector<TEdge>(IEdgeConnectorListener listener) where TEdge : EdgeView, new() {
+			SetEdgeConnector(new EdgeConnector<TEdge>(listener));
+		}
+
+		//public void SetEdgeConnector<TEdge>(Action<GraphView, Edge> onDrop = null, Action<Edge, Vector2> onDropOutsidePort = null) where TEdge : EdgeView, new() {
+		//	SetEdgeConnector(new EdgeConnector<TEdge>(new CustomEdgeListener() { onDrop = onDrop, onDropOutsidePort = onDropOutsidePort }));
+		//}
+
+		//class CustomEdgeListener : IEdgeConnectorListener {
+		//	public Action<GraphView, Edge> onDrop;
+		//	public Action<Edge, Vector2> onDropOutsidePort;
+
+		//	public void OnDrop(GraphView graphView, Edge edge) {
+		//		onDrop?.Invoke(graphView, edge);
+		//	}
+
+		//	public void OnDropOutsidePort(Edge edge, Vector2 position) {
+		//		onDropOutsidePort?.Invoke(edge, position);
+		//	}
+		//}
+		#endregion
 
 		#region Functions
 		public void SetControl(VisualElement visualElement, bool autoLayout = false) {
@@ -1203,6 +1254,8 @@ namespace MaxyGames.UNode.Editors {
 				return portType.GetElementType();
 			return portType;
 		}
+
+		public bool IsDynamicType => portData.portValue is ValuePort port && port.IsDynamicType;
 
 		public string GetPortID() {
 			return portData.portID;
@@ -1343,6 +1396,9 @@ namespace MaxyGames.UNode.Editors {
 				if(isValue) {
 					var inputPort = portView.direction == Direction.Input ? portView : this;
 					var outputPort = portView.direction == Direction.Output ? portView : this;
+					if(inputPort.GetPortValue<ValuePort>().IsAutoType || outputPort.GetPortValue<ValuePort>().IsAutoType) {
+						return true;
+					}
 
 					var filter = inputPort.portData.GetFilter();
 					var outputType = outputPort.portData.portType;
@@ -1422,6 +1478,17 @@ namespace MaxyGames.UNode.Editors {
 			}
 			for(int i = m_depths.Count - 1; i >= 0; i--) {
 				Insert(1, m_depths[i]);
+			}
+		}
+
+		public void SendMakeConnectionEvent() {
+			SendEvent(new DragEvent(GetGlobalCenter(), this));
+		}
+
+		class DragEvent : MouseDownEvent {
+			public DragEvent(Vector2 mousePosition, VisualElement target) {
+				this.mousePosition = mousePosition;
+				this.target = target;
 			}
 		}
 		#endregion

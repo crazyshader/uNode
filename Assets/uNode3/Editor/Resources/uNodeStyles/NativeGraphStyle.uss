@@ -224,6 +224,10 @@ TextField .unity-text-element {
 	margin-left: 3px;
 }
 
+.unity-base-text-field__multiline-container {
+	flex-grow: 0;
+}
+
 PopupElement{
 	flex-shrink: 1;
 	flex-grow: 0;
@@ -405,4 +409,11 @@ PopupElement:hover {
 
 .edge-debug > .edgeBubble {
 	border-color: #d00000;
+}
+
+TransitionEdgeView.unity-disabled {
+	opacity: 1;
+}
+TransitionEdgeView.edge.flow {
+	--edge-width: 2;
 }

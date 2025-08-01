@@ -94,8 +94,16 @@ namespace MaxyGames.UNode {
 		public Action<GraphInstance> onEnable;
 		public Action<GraphInstance> onDrawGizmos;
 		public Action<GraphInstance> onDrawGizmosSelected;
+		public event Action<GraphInstance> postInitialize;
 
 		private Dictionary<string, Action<GraphInstance>> customEvents;
+
+		public void PostInitialize(GraphInstance instance) {
+			if(postInitialize != null) {
+				postInitialize(instance);
+				postInitialize = null;
+			}
+		}
 
 		public void RegisterCustomEvent(string name, Action<GraphInstance> action) {
 			if(customEvents == null) {
@@ -165,6 +173,9 @@ namespace MaxyGames.UNode {
 
 		public int version;
 
+		//For debugging purpose, don't remove this
+		internal string DebugDisplay => GraphException.GetMessage(graph.GraphData.graph, target);
+
 		public GraphInstance(object target, IGraph graph, RuntimeGraphEventData eventData) {
             this.target = target;
 			this.graph = graph;
@@ -189,6 +200,7 @@ namespace MaxyGames.UNode {
 					Debug.LogException(new GraphException(ex, element));
 				}
 			}, true);
+			eventData.PostInitialize(this);
 		}
 
 		public class MemberReferenceTree {

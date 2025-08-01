@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace MaxyGames.UNode.Nodes {
 	//[NodeMenu("Flow", "State", IsCoroutine = true, order = 1, HideOnFlow = true)]
-	public class StateNode : BaseCoroutineNode, ISuperNode, IGraphEventHandler {
+	public class StateNode : BaseCoroutineNode, INodeWithEnterExitEvent, ISuperNode, INodeWithEventHandler, INodeWithConnection {
 		[HideInInspector]
 		public TransitionData transitions = new TransitionData();
 
@@ -14,16 +14,18 @@ namespace MaxyGames.UNode.Nodes {
 			return flow.state == StateType.Running;
 		}
 
-		public IEnumerable<NodeObject> nestedFlowNodes => nodeObject.GetObjectsInChildren<NodeObject>(obj => obj.node is BaseEventNode);
+		public IEnumerable<NodeObject> NestedFlowNodes => nodeObject.GetObjectsInChildren<NodeObject>(obj => obj.node is BaseEventNode);
 
 		string ISuperNode.SupportedScope => NodeScope.State + "|" + NodeScope.FlowGraph;
+
+		IEnumerable<NodeObject> INodeWithConnection.Connections => NestedFlowNodes.Concat(GetTransitions().Select(t => t.nodeObject));
 
 		public IEnumerable<TransitionEvent> GetTransitions() {
 			return transitions.GetFlowNodes<TransitionEvent>();
 		}
 
 		private event System.Action<Flow> m_onEnter;
-		public event System.Action<Flow> onEnter {
+		public event System.Action<Flow> OnEnterCallback {
 			add {
 				m_onEnter -= value;
 				m_onEnter += value;
@@ -33,7 +35,7 @@ namespace MaxyGames.UNode.Nodes {
 			}
 		}
 		private event System.Action<Flow> m_onExit;
-		public event System.Action<Flow> onExit {
+		public event System.Action<Flow> OnExitCallback {
 			add {
 				m_onExit -= value;
 				m_onExit += value;
@@ -77,7 +79,7 @@ namespace MaxyGames.UNode.Nodes {
 					}
 				}
 			}
-			foreach(BaseEventNode node in nestedFlowNodes) {
+			foreach(BaseEventNode node in NestedFlowNodes) {
 				node.Stop(flow.instance);
 			}
 			if(m_onExit != null) {
@@ -160,6 +162,10 @@ namespace MaxyGames.UNode.Nodes {
 
 		public bool AllowCoroutine() {
 			return true;
+		}
+
+		string INodeWithEventHandler.GenerateTriggerCode(string contents) {
+			return CG.If(CG.CompareEventState(enter, null), contents);
 		}
 	}
 }

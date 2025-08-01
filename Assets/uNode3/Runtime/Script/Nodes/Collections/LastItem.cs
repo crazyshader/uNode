@@ -3,7 +3,7 @@ using System.Collections;
 using System.Linq;
 
 namespace MaxyGames.UNode.Nodes {
-    [NodeMenu("Collections", "Last Item", icon = typeof(IList))]
+    [NodeMenu("Collections", "Last Item", icon = typeof(IList), inputs = new[] { typeof(IList) })]
 	public class LastItem : ValueNode {
 		public ValueInput target { get; set; }
 
@@ -12,7 +12,7 @@ namespace MaxyGames.UNode.Nodes {
 			target = ValueInput(nameof(target), typeof(IEnumerable));
 		}
 
-		public override System.Type ReturnType() {
+		protected override System.Type ReturnType() {
 			if(target.isAssigned) {
 				return target.ValueType.ElementType();
 			}

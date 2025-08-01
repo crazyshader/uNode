@@ -28,6 +28,7 @@ namespace MaxyGames.UNode.Editors {
 			SceneView.duringSceneGui += OnSceneGUI;
 			EditorApplication.update += Update;
 			EditorApplication.update += ShowWelcomeScreen;
+			EditorApplication.quitting += CreateFullBackup;
 			Undo.undoRedoPerformed += UndoRedoPerformed;
 			// Setup();
 			uNodeUtility.Init();
@@ -196,13 +197,16 @@ namespace MaxyGames.UNode.Editors {
 		}
 
 		private static void ResetGraphAssets() {
-			var assets = uNodeEditorUtility.FindAssetsByType(typeof(ScriptableObject));
+			var assets = uNodeEditorUtility.FindLoadedAssetsByType(typeof(ScriptableObject));
 			foreach(var asset in assets) {
 				if(asset is IRefreshable refreshable) {
 					refreshable.Refresh();
 				}
 			}
+		}
 
+		private static void CreateFullBackup() {
+			GraphUtility.CreateFullBackup();
 		}
 
 		[InitializeOnEnterPlayMode]
@@ -325,7 +329,7 @@ namespace MaxyGames.UNode.Editors {
 			}
 			if(GraphDebug.Breakpoint.getBreakpoints == null) {
 				GraphDebug.Breakpoint.getBreakpoints = () => {
-					return nodeDebugData;
+					return breakpointData;
 				};
 			}
 			#endregion
@@ -1228,21 +1232,21 @@ namespace MaxyGames.UNode.Editors {
 		}
 		#endregion
 
-		private static Dictionary<int, HashSet<int>> _nodeDebugData;
-		private static Dictionary<int, HashSet<int>> nodeDebugData {
+		private static Dictionary<int, HashSet<int>> m_breakpointData;
+		private static Dictionary<int, HashSet<int>> breakpointData {
 			get {
-				if(_nodeDebugData == null) {
-					_nodeDebugData = uNodeEditorUtility.LoadEditorData<Dictionary<int, HashSet<int>>>("BreakpointsMap");
-					if(_nodeDebugData == null) {
-						_nodeDebugData = new Dictionary<int, HashSet<int>>();
+				if(m_breakpointData == null) {
+					m_breakpointData = uNodeEditorUtility.LoadEditorData<Dictionary<int, HashSet<int>>>("BreakpointsMap");
+					if(m_breakpointData == null) {
+						m_breakpointData = new Dictionary<int, HashSet<int>>();
 					}
 				}
-				return _nodeDebugData;
+				return m_breakpointData;
 			}
 		}
 
 		private static void SaveDebugData() {
-			uNodeEditorUtility.SaveEditorData(_nodeDebugData, "BreakpointsMap");
+			uNodeEditorUtility.SaveEditorData(m_breakpointData, "BreakpointsMap");
 		}
 
 		#region AOT Scans
@@ -1280,8 +1284,8 @@ namespace MaxyGames.UNode.Editors {
 				GraphUtility.SaveAllGraph();
 				if(compileGraphs) {
 					if(uNodePreference.preferenceData.generatorData.autoGenerateOnBuild) {
-						GenerationUtility.DeleteGeneratedCSharpScript();
-						GenerationUtility.CompileProjectGraphs(true);
+                        GenerationUtility.DeleteGeneratedCSharpScript();
+                        GenerationUtility.CompileProjectGraphs(true);
 						while(uNodeThreadUtility.IsNeedUpdate()) {
 							uNodeThreadUtility.Update();
 						}

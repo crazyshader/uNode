@@ -7,15 +7,19 @@ using System.Collections.Generic;
 using System.Reflection;
 
 namespace MaxyGames.UNode.Editors.Drawer {
-	class SerializedValuePropertyDrawer : UPropertyDrawer<SerializedValue> {
+	public class CharPropertyDrawer : UPropertyDrawer<char> {
 		public override void Draw(Rect position, DrawerOption option) {
 			EditorGUI.BeginChangeCheck();
-			var fieldValue = GetValue(option.property, false);
-			if(fieldValue != null) {
-				uNodeGUIUtility.EditSerializedValue(fieldValue, option.label, fieldValue.type, option.unityObject);
+			var fieldValue = GetValue(option.property);
+			var newValue = EditorGUI.TextField(position, option.label, fieldValue.ToString());
+			if(!string.IsNullOrEmpty(newValue)) {
+				fieldValue = newValue[0];
+			} else {
+				fieldValue = new char();
 			}
 			if(EditorGUI.EndChangeCheck()) {
 				option.value = fieldValue;
+				GUI.changed = true;
 			}
 		}
 	}

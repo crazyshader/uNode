@@ -770,6 +770,25 @@ namespace MaxyGames.UNode.Editors {
 			}
 			uNodeEditor.RefreshEditor(true);
 		}
+
+		private void OnBreakPointHit(object owner, int graphID, int nodeID) {
+			var obj = EditorUtility.InstanceIDToObject(graphID);
+			if(obj == null) {
+				foreach(var g in GraphUtility.FindAllGraphAssets()) {
+					if(g is IGraph && uNodeUtility.GetObjectID(g) == graphID) {
+						obj = g;
+					}
+				}
+			}
+			var graph = obj as IGraph;
+			if(graph != null) {
+				var element = graph.GraphData.GetElementByID(nodeID);
+				if(element != null) {
+					Highlight(element);
+					graphData.SetAutoDebugTarget(owner);
+				}
+			}
+		}
 		#endregion
 
 		#region Save & Load Setting
@@ -865,7 +884,10 @@ namespace MaxyGames.UNode.Editors {
 			window = this;
 			uNodeGUIUtility.onGUIChanged -= GUIChanged;
 			uNodeGUIUtility.onGUIChanged += GUIChanged;
+			EditorApplication.playModeStateChanged -= OnPlaymodeStateChanged;
 			EditorApplication.playModeStateChanged += OnPlaymodeStateChanged;
+			GraphDebug.Breakpoint.onBreakPointHit -= OnBreakPointHit;
+			GraphDebug.Breakpoint.onBreakPointHit += OnBreakPointHit;
 			LoadEditorData();
 			if(!hasLoad) {
 				LoadOptions();
@@ -902,9 +924,6 @@ namespace MaxyGames.UNode.Editors {
 		}
 
 		private void Update() {
-			if(!EditorApplication.isPaused) {
-				//GraphDebug.debugLinesTimer = Mathf.Repeat(GraphDebug.debugLinesTimer += 0.03f, 1f);
-			}
 			if(Selection.activeGameObject != null && (cached.oldTarget != Selection.activeGameObject)) {
 				OnSelectionChange();
 				cached.oldTarget = Selection.activeGameObject;
@@ -915,7 +934,7 @@ namespace MaxyGames.UNode.Editors {
 				if(nowSecond != cached.errorRefreshTime) {
 					CheckErrors();
 					cached.errorRefreshTime = nowSecond;
-					Repaint();
+					//Repaint();
 				}
 			}
 		}
@@ -1015,7 +1034,7 @@ namespace MaxyGames.UNode.Editors {
 		public static void ShowWindow() {
 			window = (uNodeEditor)GetWindow(typeof(uNodeEditor), false);
 			window.minSize = new Vector2(300, 250);
-			window.autoRepaintOnSceneChange = true;
+			window.autoRepaintOnSceneChange = false;
 			window.wantsMouseMove = true;
 			window.titleContent = new GUIContent("uNode Editor"/*, Resources.Load<Texture2D>("uNODE_Logo")*/);
 			window.Show();
@@ -1024,7 +1043,6 @@ namespace MaxyGames.UNode.Editors {
 		public static void ForceRepaint() {
 			if(window != null) {
 				window.Repaint();
-				EditorApplication.RepaintHierarchyWindow();
 				GUIChanged();
 			}
 		}
@@ -1103,6 +1121,7 @@ namespace MaxyGames.UNode.Editors {
 			if(onSelectionChanged != null) {
 				onSelectionChanged(graphData);
 			}
+			
 			if(!uNodePreference.GetPreference().inspectorIntegration)
 				return;
 			if(HasOpenInstances<GraphInspectorWindow>() && GraphInspectorWindow.window?.hasFocus == true) {
@@ -1168,6 +1187,7 @@ namespace MaxyGames.UNode.Editors {
 			graphEditor.window = this;
 			graphData.Refresh();
 			graphEditor.ReloadView(fullRefresh);
+			graphEditor.CanvasChanged();
 			GUIChanged();
 		}
 
@@ -1288,8 +1308,12 @@ namespace MaxyGames.UNode.Editors {
 			if(element is NodeObject node) {
 				ShowWindow();
 				UGraphElement canvas = node;
-				if(node.node is ISuperNode)
+				if(node.node is INodeWithCustomCanvas) {
+					canvas = (node.node as INodeWithCustomCanvas).ParentCanvas;
+				}
+				else if(node.node is ISuperNode) {
 					canvas = node.parent;
+				}
 				Open(node.graphContainer, canvas);
 				window.Refresh();
 				//window.graphEditor.MoveCanvas(window.editorData.GetPosition(node));
@@ -1300,6 +1324,22 @@ namespace MaxyGames.UNode.Editors {
 				Open(element.graphContainer, element);
 				window.Refresh();
 			}
+		}
+
+		/// <summary>
+		/// Highlight the node from a c# file with the given line number and column number
+		/// </summary>
+		/// <param name="fullPath">The full path to the file</param>
+		/// <param name="line"></param>
+		/// <param name="column"></param>
+		/// <returns></returns>
+		public static bool Highlight(string fullPath, int line, int column = -1) {
+			foreach(var info in uNodeEditor.SavedData.scriptInformations) {
+				if(info.path == fullPath) {
+					return Highlight(info, line, column);
+				}
+			}
+			return false;
 		}
 
 		/// <summary>
@@ -1324,7 +1364,7 @@ namespace MaxyGames.UNode.Editors {
 			else if(asset is IScriptGraph scriptGraph) {
 				foreach(var type in scriptGraph.TypeList) {
 					if(type is IGraph) {
-						if(CanHighlight(type as IGraph, scriptInfo.informations, line, column)) {
+						if(GetElementFromScript(type as IGraph, scriptInfo.informations, line, column)) {
 							return Highlight(type as IGraph, scriptInfo.informations, line, column);
 						}
 					}
@@ -1430,33 +1470,40 @@ namespace MaxyGames.UNode.Editors {
 			return false;
 		}
 
-		public static bool CanHighlight(EditorScriptInfo scriptInfo, int line, int column = -1) {
+		public static UGraphElement GetElementFromScript(string fullPath, int line, int column = -1) {
+			foreach(var info in uNodeEditor.SavedData.scriptInformations) {
+				if(info.path == fullPath) {
+					return GetElementFromScript(info, line, column);
+				}
+			}
+			return null;
+		}
+
+		public static UGraphElement GetElementFromScript(EditorScriptInfo scriptInfo, int line, int column = -1) {
 			if(scriptInfo == null)
-				return false;
+				return null;
 			if(scriptInfo.informations == null)
-				return false;
+				return null;
 			var path = AssetDatabase.GUIDToAssetPath(scriptInfo.guid);
 			if(string.IsNullOrEmpty(path))
-				return false;
+				return null;
 			var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(path);
 			if(asset is IGraph graph) {
-				return CanHighlight(graph, scriptInfo.informations, line, column);
+				return GetElementFromScript(graph, scriptInfo.informations, line, column);
 			}
 			else if(asset is IScriptGraph scriptGraph) {
 				foreach(var type in scriptGraph.TypeList) {
 					if(type is IGraph) {
-						if(CanHighlight(type as IGraph, scriptInfo.informations, line, column)) {
-							return true;
-						}
+						return GetElementFromScript(type as IGraph, scriptInfo.informations, line, column);
 					}
 				}
 			}
-			return false;
+			return null;
 		}
 
-		public static bool CanHighlight(IGraph graph, IEnumerable<ScriptInformation> informations, int line, int column = -1) {
+		public static UGraphElement GetElementFromScript(IGraph graph, IEnumerable<ScriptInformation> informations, int line, int column = -1) {
 			if(informations == null)
-				return false;
+				return null;
 			List<ScriptInformation> information = new List<ScriptInformation>();
 			foreach(var info in informations) {
 				if(info == null)
@@ -1511,12 +1558,12 @@ namespace MaxyGames.UNode.Editors {
 							}
 						}
 						if(element != null) {
-							return true;
+							return element;
 						}
 					}
 				}
 			}
-			return false;
+			return null;
 		}
 
 		public static uNodeEditor Open(IScriptGraph scriptGraph) {
@@ -1784,7 +1831,7 @@ namespace MaxyGames.UNode.Editors {
 				previewWindow.informations = informations?.ToArray();
 				previewWindow.OnChanged(graphData);
 				EditorUtility.ClearProgressBar();
-#if UNODE_DEBUG
+#if UNODE_DEBUG || UNODE_DEV
 				uNodeEditorUtility.CopyToClipboard(script.ToRawScript());
 #endif
 			}
